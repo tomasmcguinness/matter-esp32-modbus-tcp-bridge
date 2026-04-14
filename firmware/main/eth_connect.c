@@ -23,6 +23,7 @@
 #define ETH_SPI_MISO_GPIO 12
 #define ETH_SPI_CS_GPIO 14
 #define ETH_SPI_INT_GPIO 10
+#define ETH_SPI_RST_GPIO 9
 #define ETH_SPI_CLOCK_MHZ 25
 
 static esp_netif_t *eth_start(void);
@@ -97,7 +98,7 @@ static esp_netif_t *eth_start(void)
     s_mac = esp_eth_mac_new_w5500(&w5500_config, &mac_config);
 
     eth_phy_config_t phy_config = ETH_PHY_DEFAULT_CONFIG();                                                                                                                                            
-    phy_config.reset_gpio_num = -1;
+    phy_config.reset_gpio_num = ETH_SPI_RST_GPIO;
     s_phy = esp_eth_phy_new_w5500(&phy_config);
 
     // Install Ethernet driver
