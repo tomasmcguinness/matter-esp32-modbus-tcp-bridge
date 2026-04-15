@@ -89,7 +89,6 @@ static esp_netif_t *eth_start(void)
         .queue_size = 20
     };
 
-    /* w5500 ethernet driver is based on spi driver */
     eth_w5500_config_t w5500_config = ETH_W5500_DEFAULT_CONFIG(ETH_SPI_HOST, &spi_devcfg);
     w5500_config.int_gpio_num = ETH_SPI_INT_GPIO;
 
@@ -105,19 +104,13 @@ static esp_netif_t *eth_start(void)
     esp_eth_config_t config = ETH_DEFAULT_CONFIG(s_mac, s_phy);
     ESP_ERROR_CHECK(esp_eth_driver_install(&config, &s_eth_handle));
 
-    /* The SPI Ethernet module might doesn't have a burned factory MAC address, we cat to set it manually.
-       We set the ESP_MAC_ETH mac address as the default, if you want to use ESP_MAC_EFUSE_CUSTOM mac address, please enable the
-       configuration: `ESP_MAC_USE_CUSTOM_MAC_AS_BASE_MAC`
-    */
     uint8_t eth_mac[6] = {0};
     ESP_ERROR_CHECK(esp_read_mac(eth_mac, ESP_MAC_ETH));
     ESP_ERROR_CHECK(esp_eth_ioctl(s_eth_handle, ETH_CMD_S_MAC_ADDR, eth_mac));
 
-    // combine driver with netif
     s_eth_glue = esp_eth_new_netif_glue(s_eth_handle);
     esp_netif_attach(eth_netif, s_eth_glue);
 
-    // Register user defined event handers
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &on_ip_event, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, &on_eth_event, eth_netif));
 
