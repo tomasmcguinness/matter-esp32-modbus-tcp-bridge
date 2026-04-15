@@ -1,10 +1,10 @@
 ---
 id: TASK-4
 title: Open TCP Connection to Modbus port
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-04-14 05:53'
-updated_date: '2026-04-15 06:02'
+updated_date: '2026-04-15 15:49'
 labels: []
 milestone: m-1
 dependencies: []

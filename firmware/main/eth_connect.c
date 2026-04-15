@@ -26,9 +26,13 @@
 #define ETH_SPI_RST_GPIO 9
 #define ETH_SPI_CLOCK_MHZ 25
 
-static esp_netif_t *eth_start(void);
+#include "eth_connect.h"
+
+static esp_netif_t *eth_start(eth_got_ip_cb_t on_got_ip);
 
 static const char *TAG = "ethernet_connect";
+
+static eth_got_ip_cb_t s_on_got_ip = NULL;
 
 static void on_eth_event(void *esp_netif, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
@@ -36,7 +40,7 @@ static void on_eth_event(void *esp_netif, esp_event_base_t event_base, int32_t e
     {
     case ETHERNET_EVENT_CONNECTED:
         ESP_LOGI(TAG, "Ethernet link up");
-        ESP_ERROR_CHECK(esp_netif_create_ip6_linklocal((esp_netif_t *)esp_netif));
+        //ESP_ERROR_CHECK(esp_netif_create_ip6_linklocal((esp_netif_t *)esp_netif));
         break;
     case ETHERNET_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "Ethernet link down");
@@ -54,12 +58,18 @@ static void on_ip_event(void *arg, esp_event_base_t event_base, int32_t event_id
 {
     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
     ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
+    if (s_on_got_ip) {
+        s_on_got_ip(event->esp_netif);
+    }
 }
 
 static void on_ipv6_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     ip_event_got_ip6_t *event = (ip_event_got_ip6_t *)event_data;
     ESP_LOGI(TAG, "Got IPv6: " IPV6STR, IPV62STR(event->ip6_info.ip));
+    if (s_on_got_ip) {
+        s_on_got_ip(event->esp_netif);
+    }
 }
 
 static esp_eth_handle_t s_eth_handle = NULL;
@@ -67,8 +77,9 @@ static esp_eth_mac_t *s_mac = NULL;
 static esp_eth_phy_t *s_phy = NULL;
 static esp_eth_netif_glue_handle_t s_eth_glue = NULL;
 
-static esp_netif_t *eth_start(void)
+static esp_netif_t *eth_start(eth_got_ip_cb_t on_got_ip)
 {
+    s_on_got_ip = on_got_ip;
     gpio_install_isr_service(0);
 
     ESP_ERROR_CHECK(esp_netif_init());                                                                                                                                                                     
@@ -122,8 +133,8 @@ static esp_netif_t *eth_start(void)
     return eth_netif;
 }
 
-esp_err_t eth_connect(void)
+esp_err_t eth_connect(eth_got_ip_cb_t on_got_ip)
 {
-    eth_start();
+    eth_start(on_got_ip);
     return ESP_OK;
 }
