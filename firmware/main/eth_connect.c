@@ -51,11 +51,14 @@ static void on_eth_event(void *esp_netif, esp_event_base_t event_base, int32_t e
 
 static void on_ip_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
-    if (event_id == IP_EVENT_ETH_GOT_IP)
-    {
-        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-        ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
-    }
+    ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+    ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
+}
+
+static void on_ipv6_event(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
+{
+    ip_event_got_ip6_t *event = (ip_event_got_ip6_t *)event_data;
+    ESP_LOGI(TAG, "Got IPv6: " IPV6STR, IPV62STR(event->ip6_info.ip));
 }
 
 static esp_eth_handle_t s_eth_handle = NULL;
@@ -93,14 +96,12 @@ static esp_netif_t *eth_start(void)
     w5500_config.int_gpio_num = ETH_SPI_INT_GPIO;
 
     eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();                                                                                                                                            
-
     s_mac = esp_eth_mac_new_w5500(&w5500_config, &mac_config);
 
     eth_phy_config_t phy_config = ETH_PHY_DEFAULT_CONFIG();                                                                                                                                            
     phy_config.reset_gpio_num = ETH_SPI_RST_GPIO;
     s_phy = esp_eth_phy_new_w5500(&phy_config);
 
-    // Install Ethernet driver
     esp_eth_config_t config = ETH_DEFAULT_CONFIG(s_mac, s_phy);
     ESP_ERROR_CHECK(esp_eth_driver_install(&config, &s_eth_handle));
 
@@ -112,6 +113,7 @@ static esp_netif_t *eth_start(void)
     esp_netif_attach(eth_netif, s_eth_glue);
 
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &on_ip_event, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_GOT_IP6, &on_ipv6_event, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, &on_eth_event, eth_netif));
 
     esp_eth_start(s_eth_handle);

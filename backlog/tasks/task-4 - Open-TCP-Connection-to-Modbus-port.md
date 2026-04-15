@@ -4,10 +4,11 @@ title: Open TCP Connection to Modbus port
 status: To Do
 assignee: []
 created_date: '2026-04-14 05:53'
-updated_date: '2026-04-14 05:54'
+updated_date: '2026-04-15 06:02'
 labels: []
 milestone: m-1
 dependencies: []
+ordinal: 1000
 ---
 
 ## Description
