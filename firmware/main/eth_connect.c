@@ -36,6 +36,7 @@ static void on_eth_event(void *esp_netif, esp_event_base_t event_base, int32_t e
     {
     case ETHERNET_EVENT_CONNECTED:
         ESP_LOGI(TAG, "Ethernet link up");
+        ESP_ERROR_CHECK(esp_netif_create_ip6_linklocal((esp_netif_t *)esp_netif));
         break;
     case ETHERNET_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "Ethernet link down");
