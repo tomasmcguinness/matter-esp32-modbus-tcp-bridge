@@ -1,11 +1,15 @@
 #include <stdio.h>
 #include <nvs_flash.h>
 #include "esp_log.h"
-#include "eth_connect.h"
+#include "esp_netif.h"
 #include "modbus_tcp.h"
 #include "mdns.h"
 
 #include <esp_matter.h>
+
+#define MDNS_DELEGATED_HOSTNAME "modbus-adapter"
+#define MDNS_HTTP_INSTANCE      "modbus-adapter"
+#define MDNS_HTTP_PORT          80
 
 #define ABORT_APP_ON_FAILURE(x, ...)               \
     do                                             \
@@ -27,7 +31,7 @@ using namespace esp_matter::endpoint;
 
 using namespace chip::app::Clusters;
 
-static uint16_t electrical_sensor_endpoint_id = 0;
+//static uint16_t electrical_sensor_endpoint_id = 0;
 
 static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
 {
@@ -51,16 +55,58 @@ static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
     case chip::DeviceLayer::DeviceEventType::kDnssdInitialized:
         ESP_LOGI(TAG, "Dnssd initialized");
         break;
-        //{
-
-        //     esp_err_t err = mdns_service_add_for_host("modbus-adapter.local", "_http", "_tcp", "modbus-adapter", 80, NULL, 0);
-        //     if (err != ESP_OK) {
-        //         ESP_LOGE(TAG, "Failed to add MDNS service: %d", err);
-        //     }
-        // }
-    case chip::DeviceLayer::DeviceEventType::kInterfaceIpAddressChanged:
-        ESP_LOGI(TAG, "kInterfaceIpAddressChanged");
+    case chip::DeviceLayer::DeviceEventType::kInternetConnectivityChange:
+        ESP_LOGI(TAG, "Internet connectivity change");
         break;
+    case chip::DeviceLayer::DeviceEventType::kInterfaceIpAddressChanged:
+    {
+        ESP_LOGI(TAG, "kInterfaceIpAddressChanged");
+
+        static bool mdns_registered = false;
+        if (mdns_registered)
+        {
+            break;
+        }
+
+        esp_netif_t *eth_netif = esp_netif_get_handle_from_ifkey("ETH_DEF");
+        if (eth_netif == nullptr)
+        {
+            ESP_LOGE(TAG, "Ethernet netif not found; skipping mDNS delegation");
+            break;
+        }
+
+        esp_netif_ip_info_t ip_info;
+        if (esp_netif_get_ip_info(eth_netif, &ip_info) != ESP_OK || ip_info.ip.addr == 0)
+        {
+            ESP_LOGW(TAG, "Ethernet netif has no IPv4 yet; skipping mDNS delegation");
+            break;
+        }
+
+        mdns_ip_addr_t addr = {};
+        addr.addr.type       = ESP_IPADDR_TYPE_V4;
+        addr.addr.u_addr.ip4 = ip_info.ip;
+        addr.next            = nullptr;
+
+        esp_err_t err = mdns_delegate_hostname_add(MDNS_DELEGATED_HOSTNAME, &addr);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE(TAG, "mdns_delegate_hostname_add failed: 0x%x", err);
+            break;
+        }
+
+        ESP_LOGI(TAG, "mDNS delegated hostname added: %s.local -> " IPSTR, MDNS_DELEGATED_HOSTNAME, IP2STR(&ip_info.ip));
+
+        err = mdns_service_add_for_host(NULL, "_http", "_tcp", MDNS_DELEGATED_HOSTNAME, MDNS_HTTP_PORT, NULL, 0);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE(TAG, "mdns_service_add_for_host failed: 0x%x", err);
+            break;
+        }
+
+        mdns_registered = true;
+        ESP_LOGI(TAG, "mDNS: %s.local -> " IPSTR " with _http._tcp:%d", MDNS_DELEGATED_HOSTNAME, IP2STR(&ip_info.ip), MDNS_HTTP_PORT);
+        break;
+    }
     default:
         break;
     }
@@ -82,61 +128,23 @@ static esp_err_t app_attribute_update_cb(attribute::callback_type_t type,
     return ESP_OK;
 }
 
-static void on_grid_voltage(uint16_t value)
-{
-    ESP_LOGI(TAG, "Grid Voltage: %u", value);
-}
+// static void on_grid_voltage(uint16_t value)
+// {
+//     ESP_LOGI(TAG, "Grid Voltage: %u", value);
+// }
 
 extern "C" void app_main()
 {
     nvs_flash_init();
-
-    static EthConnect eth([](esp_netif_t *netif) {
-
-        esp_netif_ip_info_t ip_info;
-        esp_netif_get_ip_info(netif, &ip_info);
-
-        mdns_ip_addr_t addr4 = {};
-        addr4.addr.type = ESP_IPADDR_TYPE_V4;
-        addr4.addr.u_addr.ip4.addr = ip_info.ip.addr;
-
-        mdns_delegate_hostname_add("modbus-adapter", &addr4);
-        esp_err_t err = mdns_service_add_for_host("modbus-adapter.local", "_http", "_tcp", "modbus-adapter", 80, NULL, 0);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to add MDNS service: %d", err);
-        }
-
-    //     esp_err_t err = modbus_tcp_connect(netif, "192.168.1.164", 502);
-    //     if (err != ESP_OK) {
-    //         return;
-    //     }
-    //     modbus_tcp_poll_input_register(1, 0x0000, on_grid_voltage);
-    });
-    eth.connect();
 
     // Create the root endpoint
     node::config_t node_config;
     node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
     ABORT_APP_ON_FAILURE(node != nullptr, ESP_LOGE(TAG, "Failed to create Matter node"));
 
-    electrical_sensor::config_t electrical_sensor_config;
-    // Configure the sensor as a node.
-    electrical_sensor_config.power_topology.feature_flags = power_topology::feature::node_topology::get_id();
-
-    // Configure AC as the power type.
-    electrical_sensor_config.electrical_power_measurement.feature_flags = electrical_power_measurement::feature::alternating_current::get_id();
-    // electrical_sensor_config.electrical_power_measurement.delegate = &EPMDelegate;
-
-    endpoint_t *endpoint = electrical_sensor::create(node, &electrical_sensor_config, ENDPOINT_FLAG_NONE, NULL);
-    ABORT_APP_ON_FAILURE(endpoint != nullptr, ESP_LOGE(TAG, "Failed to create electrical sensor endpoint"));
-    electrical_sensor_endpoint_id = endpoint::get_id(endpoint);
-
-    cluster_t *cluster = cluster::get(endpoint, chip::app::Clusters::ElectricalPowerMeasurement::Id);
-    ABORT_APP_ON_FAILURE(cluster != nullptr, ESP_LOGE(TAG, "Failed to get EPM cluster from endpoint"));
-
-    electrical_power_measurement::attribute::create_voltage(cluster, 0);
-    // electrical_power_measurement::attribute::create_active_current(cluster, 0);
-    // electrical_power_measurement::attribute::create_active_power(cluster, 0);
+    temperature_sensor::config_t temp_sensor_config;
+    endpoint_t * temp_sensor_ep = temperature_sensor::create(node, &temp_sensor_config, ENDPOINT_FLAG_NONE, NULL);
+    ABORT_APP_ON_FAILURE(temp_sensor_ep != nullptr, ESP_LOGE(TAG, "Failed to create temperature_sensor endpoint"));
 
     esp_err_t err = esp_matter::start(app_event_cb);
 

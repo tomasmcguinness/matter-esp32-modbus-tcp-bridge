@@ -47,7 +47,7 @@ dependencies:
       type: service
     version: 1.1.0
   espressif/esp_diagnostics:
-    component_hash: 520d9c39b58a63c7bec9aa32f1fa94c34a868b557f99269533948a8a66d1a9a2
+    component_hash: 32f2e8b9fea1e055a8460fb8afdc96360c40dd461128ee13ceed44296c068e90
     dependencies:
     - name: espressif/rmaker_common
       registry_url: https://components.espressif.com
@@ -59,7 +59,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 1.3.2
+    version: 1.3.3
   espressif/esp_encrypted_img:
     component_hash: e5a065c140fbc6a69a1de4fa1731b7596cc34a4a50b57913b2dc34c9ad3a0a70
     dependencies:
@@ -71,7 +71,7 @@ dependencies:
       type: service
     version: 2.3.0
   espressif/esp_insights:
-    component_hash: c7584927b81f9a55dfa6c8334968cf57b7cb662bfb1c7ac82856764db174ff33
+    component_hash: ed93cb82d424d9c651d656ef19b6de5b78bb356fefaa5b4003c136ef188846e3
     dependencies:
     - name: espressif/cbor
       registry_url: https://components.espressif.com
@@ -95,7 +95,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 1.3.2
+    version: 1.3.3
   espressif/esp_matter:
     component_hash: b8cbd5ecfc031c48348e7de377f06c1c4f4d92d9179b05b04e664db6a53954d5
     dependencies:
@@ -169,7 +169,7 @@ dependencies:
       type: service
     version: 1.3.1
   espressif/esp_secure_cert_mgr:
-    component_hash: 2587797e68395edb67f30a7f9a7ce6a529492fa5fa6468592e912bc7ea34dbae
+    component_hash: 40a986c1f45d91eb6d339ca51dcab90c4ecce2a6622c268edaaa05887852d464
     dependencies:
     - name: idf
       require: private
@@ -177,7 +177,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 2.9.1
+    version: 2.9.2
   espressif/jsmn:
     component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
     dependencies:
@@ -215,7 +215,7 @@ dependencies:
       require: private
       version: '>=5.0'
     source:
-      registry_url: https://components.espressif.com
+      registry_url: https://components.espressif.com/
       type: service
     version: 1.11.0
   espressif/rmaker_common:
@@ -241,6 +241,7 @@ dependencies:
 direct_dependencies:
 - espressif/esp-modbus
 - espressif/esp_matter
-manifest_hash: 17a653f621943cc228670eddcfb581dfcf72cb4bfad905e28ca8e95d50dbef51
+- espressif/mdns
+manifest_hash: 994793b1a18befdd62af1b4fa63dd4fc6f5df4f0a811894dad7cff203084f142
 target: esp32s3
 version: 2.0.0
