@@ -1,6 +1,7 @@
-idf_component_register(SRCS "main.cpp" "matter_ethernet_driver.cpp" "modbus_tcp.c"
+idf_component_register(SRCS "main.cpp" "matter_ethernet_driver.cpp" "modbus_tcp.c" "web_server.cpp"
                        INCLUDE_DIRS "."
-                       REQUIRES esp_eth esp_netif esp_event driver mdns espressif__esp_matter)
+                       REQUIRES esp_eth esp_netif esp_event esp_http_server driver mdns espressif__esp_matter
+                       EMBED_FILES "${CMAKE_SOURCE_DIR}/html_app/index.html")
 
 idf_component_get_property(matter_lib espressif__esp_matter COMPONENT_LIB)
 set_source_files_properties(

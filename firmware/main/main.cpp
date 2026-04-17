@@ -4,6 +4,7 @@
 #include "esp_netif.h"
 #include "modbus_tcp.h"
 #include "mdns.h"
+#include "web_server.h"
 
 #include <esp_matter.h>
 
@@ -153,4 +154,6 @@ extern "C" void app_main()
         ESP_LOGE(TAG, "Failed to start Matter: %d", err);
         return;
     }
+
+    web_server_start();
 }
