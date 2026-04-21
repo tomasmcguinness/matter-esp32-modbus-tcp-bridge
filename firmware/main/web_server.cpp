@@ -8,6 +8,9 @@
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_spiffs.h"
+#include "cJSON.h"
+
+#include "devices_store.h"
 
 static const char *TAG = "web_server";
 
@@ -62,6 +65,222 @@ static esp_err_t send_file(httpd_req_t *req, const char *fs_path)
     fclose(f);
     httpd_resp_send_chunk(req, nullptr, 0);
     return ESP_OK;
+}
+
+#define DEVICES_API_PREFIX     "/api/devices"
+#define DEVICES_API_PREFIX_LEN 12
+#define MAX_POST_BODY          1024
+
+static esp_err_t send_json(httpd_req_t *req, cJSON *root, int status)
+{
+    char *text = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!text)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OOM");
+        return ESP_FAIL;
+    }
+    if (status == 201) httpd_resp_set_status(req, "201 Created");
+    httpd_resp_set_type(req, "application/json");
+    esp_err_t err = httpd_resp_sendstr(req, text);
+    free(text);
+    return err;
+}
+
+static cJSON *device_to_json(const device_config_t *d)
+{
+    cJSON *o = cJSON_CreateObject();
+    cJSON_AddStringToObject(o, "id",     d->id);
+    cJSON_AddStringToObject(o, "name",   d->name);
+    cJSON_AddStringToObject(o, "host",   d->host);
+    cJSON_AddNumberToObject(o, "port",   d->port);
+    cJSON_AddNumberToObject(o, "unitId", d->unit_id);
+    return o;
+}
+
+static esp_err_t devices_get_handler(httpd_req_t *req)
+{
+    cJSON *arr = cJSON_CreateArray();
+    for (size_t i = 0; i < devices_store_count(); ++i)
+    {
+        cJSON_AddItemToArray(arr, device_to_json(devices_store_at(i)));
+    }
+    return send_json(req, arr, 200);
+}
+
+static esp_err_t devices_post_handler(httpd_req_t *req)
+{
+    if (req->content_len <= 0 || req->content_len > MAX_POST_BODY)
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid body");
+        return ESP_FAIL;
+    }
+
+    char buf[MAX_POST_BODY + 1];
+    int received = 0;
+    while (received < req->content_len)
+    {
+        int r = httpd_req_recv(req, buf + received, req->content_len - received);
+        if (r <= 0)
+        {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Recv failed");
+            return ESP_FAIL;
+        }
+        received += r;
+    }
+    buf[received] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root)
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad JSON");
+        return ESP_FAIL;
+    }
+    cJSON *name   = cJSON_GetObjectItemCaseSensitive(root, "name");
+    cJSON *host   = cJSON_GetObjectItemCaseSensitive(root, "host");
+    cJSON *port   = cJSON_GetObjectItemCaseSensitive(root, "port");
+    cJSON *unitId = cJSON_GetObjectItemCaseSensitive(root, "unitId");
+    if (!cJSON_IsString(name) || !cJSON_IsString(host) ||
+        !cJSON_IsNumber(port) || !cJSON_IsNumber(unitId))
+    {
+        cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing fields");
+        return ESP_FAIL;
+    }
+
+    device_config_t created;
+    esp_err_t err = devices_store_add(name->valuestring,
+                                      host->valuestring,
+                                      (uint16_t)port->valueint,
+                                      (uint8_t)unitId->valueint,
+                                      &created);
+    cJSON_Delete(root);
+
+    if (err == ESP_ERR_NO_MEM)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Device limit reached");
+        return ESP_FAIL;
+    }
+    if (err != ESP_OK)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Persist failed");
+        return ESP_FAIL;
+    }
+    return send_json(req, device_to_json(&created), 201);
+}
+
+static esp_err_t read_body(httpd_req_t *req, char *buf, size_t buf_sz)
+{
+    if (req->content_len <= 0 || (size_t)req->content_len >= buf_sz)
+    {
+        return ESP_FAIL;
+    }
+    int received = 0;
+    while (received < req->content_len)
+    {
+        int r = httpd_req_recv(req, buf + received, req->content_len - received);
+        if (r <= 0) return ESP_FAIL;
+        received += r;
+    }
+    buf[received] = '\0';
+    return ESP_OK;
+}
+
+static const char *extract_id(const char *uri)
+{
+    if (strncmp(uri, DEVICES_API_PREFIX "/", DEVICES_API_PREFIX_LEN + 1) != 0)
+    {
+        return nullptr;
+    }
+    const char *id = uri + DEVICES_API_PREFIX_LEN + 1;
+    if (*id == '\0' || strchr(id, '/') != nullptr) return nullptr;
+    return id;
+}
+
+static esp_err_t devices_put_handler(httpd_req_t *req)
+{
+    const char *id = extract_id(req->uri);
+    if (!id)
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad id");
+        return ESP_FAIL;
+    }
+
+    char buf[MAX_POST_BODY + 1];
+    if (read_body(req, buf, sizeof(buf)) != ESP_OK)
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid body");
+        return ESP_FAIL;
+    }
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root)
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad JSON");
+        return ESP_FAIL;
+    }
+    cJSON *name   = cJSON_GetObjectItemCaseSensitive(root, "name");
+    cJSON *host   = cJSON_GetObjectItemCaseSensitive(root, "host");
+    cJSON *port   = cJSON_GetObjectItemCaseSensitive(root, "port");
+    cJSON *unitId = cJSON_GetObjectItemCaseSensitive(root, "unitId");
+    if (!cJSON_IsString(name) || !cJSON_IsString(host) ||
+        !cJSON_IsNumber(port) || !cJSON_IsNumber(unitId))
+    {
+        cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing fields");
+        return ESP_FAIL;
+    }
+
+    device_config_t updated;
+    esp_err_t err = devices_store_update(id,
+                                         name->valuestring,
+                                         host->valuestring,
+                                         (uint16_t)port->valueint,
+                                         (uint8_t)unitId->valueint,
+                                         &updated);
+    cJSON_Delete(root);
+
+    if (err == ESP_ERR_NOT_FOUND)
+    {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Device not found");
+        return ESP_FAIL;
+    }
+    if (err != ESP_OK)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Persist failed");
+        return ESP_FAIL;
+    }
+    return send_json(req, device_to_json(&updated), 200);
+}
+
+static esp_err_t devices_delete_handler(httpd_req_t *req)
+{
+    const char *uri = req->uri;
+    if (strncmp(uri, DEVICES_API_PREFIX "/", DEVICES_API_PREFIX_LEN + 1) != 0)
+    {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Not found");
+        return ESP_FAIL;
+    }
+    const char *id = uri + DEVICES_API_PREFIX_LEN + 1;
+    if (*id == '\0' || strchr(id, '/') != nullptr)
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad id");
+        return ESP_FAIL;
+    }
+
+    esp_err_t err = devices_store_remove(id);
+    if (err == ESP_ERR_NOT_FOUND)
+    {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Device not found");
+        return ESP_FAIL;
+    }
+    if (err != ESP_OK)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Persist failed");
+        return ESP_FAIL;
+    }
+    httpd_resp_set_status(req, "204 No Content");
+    return httpd_resp_send(req, nullptr, 0);
 }
 
 static esp_err_t static_get_handler(httpd_req_t *req)
@@ -138,6 +357,38 @@ esp_err_t web_server_start(void)
         ESP_LOGE(TAG, "httpd_start failed: 0x%x", err);
         return err;
     }
+
+    const httpd_uri_t devices_get_uri = {
+        .uri      = "/api/devices",
+        .method   = HTTP_GET,
+        .handler  = devices_get_handler,
+        .user_ctx = nullptr,
+    };
+    httpd_register_uri_handler(server, &devices_get_uri);
+
+    const httpd_uri_t devices_post_uri = {
+        .uri      = "/api/devices",
+        .method   = HTTP_POST,
+        .handler  = devices_post_handler,
+        .user_ctx = nullptr,
+    };
+    httpd_register_uri_handler(server, &devices_post_uri);
+
+    const httpd_uri_t devices_put_uri = {
+        .uri      = "/api/devices/*",
+        .method   = HTTP_PUT,
+        .handler  = devices_put_handler,
+        .user_ctx = nullptr,
+    };
+    httpd_register_uri_handler(server, &devices_put_uri);
+
+    const httpd_uri_t devices_delete_uri = {
+        .uri      = "/api/devices/*",
+        .method   = HTTP_DELETE,
+        .handler  = devices_delete_handler,
+        .user_ctx = nullptr,
+    };
+    httpd_register_uri_handler(server, &devices_delete_uri);
 
     const httpd_uri_t static_uri = {
         .uri      = "/*",

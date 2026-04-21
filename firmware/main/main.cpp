@@ -5,6 +5,7 @@
 #include "modbus_tcp.h"
 #include "mdns.h"
 #include "web_server.h"
+#include "devices_store.h"
 
 #include <esp_matter.h>
 
@@ -155,5 +156,6 @@ extern "C" void app_main()
         return;
     }
 
+    devices_store_init();
     web_server_start();
 }

@@ -4,3 +4,4 @@ dependencies:
   espressif/esp_matter:
     version: ^1.4.0
   espressif/mdns: '*'
+  joltwallet/littlefs: ^1.10.0
