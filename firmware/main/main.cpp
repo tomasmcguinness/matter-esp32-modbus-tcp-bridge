@@ -139,9 +139,9 @@ extern "C" void app_main()
     node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
     ABORT_APP_ON_FAILURE(node != nullptr, ESP_LOGE(TAG, "Failed to create Matter node"));
 
-    temperature_sensor::config_t temp_sensor_config;
-    endpoint_t * temp_sensor_ep = temperature_sensor::create(node, &temp_sensor_config, ENDPOINT_FLAG_NONE, NULL);
-    ABORT_APP_ON_FAILURE(temp_sensor_ep != nullptr, ESP_LOGE(TAG, "Failed to create temperature_sensor endpoint"));
+    aggregator::config_t agg_config;
+    endpoint_t *agg_ep = aggregator::create(node, &agg_config, ENDPOINT_FLAG_NONE, nullptr);
+    ABORT_APP_ON_FAILURE(agg_ep != nullptr, ESP_LOGE(TAG, "Failed to create aggregator endpoint"));
 
     esp_err_t err = esp_matter::start(app_event_cb);
 
@@ -152,7 +152,7 @@ extern "C" void app_main()
     }
 
     devices_store_init();
-    ModbusManager::instance().init(node);
+    ModbusManager::instance().init(node, agg_ep);
     web_server_start([]() {
         chip::Server::GetInstance().ScheduleFactoryReset();
     });

@@ -18,26 +18,28 @@ ModbusManager &ModbusManager::instance()
     return s_instance;
 }
 
-esp_err_t ModbusManager::init(esp_matter::node_t *node)
+esp_err_t ModbusManager::init(esp_matter::node_t *node, esp_matter::endpoint_t *aggregator)
 {
-    m_node = node;
+    m_node       = node;
+    m_aggregator = aggregator;
     size_t count = devices_store_count();
     for (size_t i = 0; i < count; i++) {
         const device_config_t *cfg = devices_store_at(i);
         auto *modbus = new ModbusDevice(*cfg);
-        auto *matter = new SolarPowerDevice(m_node, *cfg);
+        auto *matter = new SolarPowerDevice(m_node, m_aggregator, *cfg);
         modbus->set_voltage_callback(voltage_update_cb, matter);
         modbus->start_polling();
         m_devices.push_back({modbus, matter});
         ESP_LOGI(TAG, "Registered device '%s' (%s:%u)", cfg->name, cfg->host, cfg->port);
     }
+
     return ESP_OK;
 }
 
 esp_err_t ModbusManager::on_device_added(const device_config_t &config)
 {
     auto *modbus = new ModbusDevice(config);
-    auto *matter = new SolarPowerDevice(m_node, config);
+    auto *matter = new SolarPowerDevice(m_node, m_aggregator, config);
     modbus->set_voltage_callback(voltage_update_cb, matter);
     modbus->start_polling();
     m_devices.push_back({modbus, matter});

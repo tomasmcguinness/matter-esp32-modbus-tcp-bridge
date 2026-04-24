@@ -11,7 +11,7 @@ class ModbusManager {
 public:
     static ModbusManager &instance();
 
-    esp_err_t init(esp_matter::node_t *node);
+    esp_err_t init(esp_matter::node_t *node, esp_matter::endpoint_t *aggregator);
 
     esp_err_t on_device_added(const device_config_t &config);
     esp_err_t on_device_removed(const char *id);
@@ -27,6 +27,7 @@ private:
     };
 
     ModbusManager() = default;
-    esp_matter::node_t       *m_node = nullptr;
+    esp_matter::node_t       *m_node       = nullptr;
+    esp_matter::endpoint_t   *m_aggregator = nullptr;
     std::vector<DevicePair>   m_devices;
 };
