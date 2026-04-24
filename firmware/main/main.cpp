@@ -2,7 +2,7 @@
 #include <nvs_flash.h>
 #include "esp_log.h"
 #include "esp_netif.h"
-#include "modbus_tcp.h"
+#include "modbus_manager.h"
 #include "mdns.h"
 #include "web_server.h"
 #include "devices_store.h"
@@ -152,5 +152,8 @@ extern "C" void app_main()
     }
 
     devices_store_init();
-    web_server_start();
+    ModbusManager::instance().init(node);
+    web_server_start([]() {
+        chip::Server::GetInstance().ScheduleFactoryReset();
+    });
 }

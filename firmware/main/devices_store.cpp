@@ -261,3 +261,9 @@ esp_err_t devices_store_remove(const char *id)
     }
     return ESP_ERR_NOT_FOUND;
 }
+
+esp_err_t devices_store_clear(void)
+{
+    s_count = 0;
+    return persist();
+}

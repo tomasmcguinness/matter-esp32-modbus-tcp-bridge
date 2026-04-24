@@ -11,6 +11,9 @@
 #include "cJSON.h"
 
 #include "devices_store.h"
+#include "modbus_manager.h"
+
+static factory_reset_cb_t s_factory_reset_cb = nullptr;
 
 static const char *TAG = "web_server";
 
@@ -166,6 +169,7 @@ static esp_err_t devices_post_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Persist failed");
         return ESP_FAIL;
     }
+    ModbusManager::instance().on_device_added(created);
     return send_json(req, device_to_json(&created), 201);
 }
 
@@ -250,6 +254,7 @@ static esp_err_t devices_put_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Persist failed");
         return ESP_FAIL;
     }
+    ModbusManager::instance().on_device_updated(updated);
     return send_json(req, device_to_json(&updated), 200);
 }
 
@@ -279,8 +284,24 @@ static esp_err_t devices_delete_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Persist failed");
         return ESP_FAIL;
     }
+    ModbusManager::instance().on_device_removed(id);
     httpd_resp_set_status(req, "204 No Content");
     return httpd_resp_send(req, nullptr, 0);
+}
+
+static esp_err_t factory_reset_handler(httpd_req_t *req)
+{
+    ModbusManager::instance().clear();
+    devices_store_clear();
+
+    httpd_resp_set_status(req, "200 OK");
+    httpd_resp_send(req, nullptr, 0);
+
+    if (s_factory_reset_cb) {
+        s_factory_reset_cb();
+    }
+
+    return ESP_OK;
 }
 
 static esp_err_t static_get_handler(httpd_req_t *req)
@@ -336,8 +357,9 @@ static esp_err_t mount_spiffs(void)
     return ESP_OK;
 }
 
-esp_err_t web_server_start(void)
+esp_err_t web_server_start(factory_reset_cb_t on_factory_reset)
 {
+    s_factory_reset_cb = on_factory_reset;
     esp_err_t err = mount_spiffs();
     if (err != ESP_OK)
     {
@@ -389,6 +411,14 @@ esp_err_t web_server_start(void)
         .user_ctx = nullptr,
     };
     httpd_register_uri_handler(server, &devices_delete_uri);
+
+    const httpd_uri_t factory_reset_uri = {
+        .uri      = "/api/factory-reset",
+        .method   = HTTP_POST,
+        .handler  = factory_reset_handler,
+        .user_ctx = nullptr,
+    };
+    httpd_register_uri_handler(server, &factory_reset_uri);
 
     const httpd_uri_t static_uri = {
         .uri      = "/*",

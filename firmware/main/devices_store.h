@@ -40,6 +40,7 @@ esp_err_t devices_store_update(const char *id,
                                device_config_t *out);
 
 esp_err_t devices_store_remove(const char *id);
+esp_err_t devices_store_clear(void);
 
 #ifdef __cplusplus
 }

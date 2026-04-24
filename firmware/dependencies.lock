@@ -9,16 +9,6 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 0.6.1~4
-  espressif/esp-modbus:
-    component_hash: 5d5e90b9e55721a8a194b301ad8102d4affb647f47b74cd413ff7d1ce2c1169c
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.3'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.0.18
   espressif/esp-serial-flasher:
     component_hash: dcc42a16712a1a636509cf0bf90e14032d7f2141784b533613b267b6aa318d52
     dependencies: []
@@ -249,10 +239,9 @@ dependencies:
       type: service
     version: 1.21.1
 direct_dependencies:
-- espressif/esp-modbus
 - espressif/esp_matter
 - espressif/mdns
 - joltwallet/littlefs
-manifest_hash: a258468282bea0bcc0ebcc16d21dfd8330a0acd754f77b5e0544e4e92da7e496
+manifest_hash: db50c5aabecdb8a452136d14056c509e0a4b5438178afb27b3f5b6563e8eead1
 target: esp32s3
 version: 2.0.0

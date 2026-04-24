@@ -40,4 +40,9 @@ export const handlers = [
     const [removed] = devices.splice(index, 1)
     return HttpResponse.json(removed)
   }),
+
+  http.post('/api/factory-reset', () => {
+    devices.splice(0, devices.length)
+    return new HttpResponse(null, { status: 200 })
+  }),
 ]

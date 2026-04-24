@@ -4,6 +4,7 @@ import Home from './Home.tsx'
 import Devices from './Devices.tsx'
 import AddDevice from './AddDevice.tsx'
 import EditDevice from './EditDevice.tsx'
+import Settings from './Settings.tsx'
 
 function App() {
 
@@ -19,7 +20,12 @@ function App() {
             <ul className="navbar-nav">
               <li className="nav-item">
                 <NavLink className="nav-link" to="/">Home</NavLink>
+              </li>
+              <li className="nav-item">
                 <NavLink className="nav-link" to="/devices">Modbus Devices</NavLink>
+              </li>
+              <li className="nav-item">
+                <NavLink className="nav-link" to="/settings">Settings</NavLink>
               </li>
             </ul>
           </div>
@@ -31,6 +37,7 @@ function App() {
           <Route path="/devices" element={<Devices />} />
           <Route path="/devices/add" element={<AddDevice />} />
           <Route path="/devices/:id/edit" element={<EditDevice />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </div>
     </>
