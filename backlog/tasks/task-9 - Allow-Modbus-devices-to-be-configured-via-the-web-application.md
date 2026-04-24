@@ -1,14 +1,14 @@
 ---
 id: TASK-9
 title: Allow Modbus devices to be configured via the web application
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-04-14 06:04'
-updated_date: '2026-04-15 06:02'
+updated_date: '2026-04-22 15:01'
 labels: []
 milestone: m-3
 dependencies: []
-ordinal: 6000
+ordinal: 5000
 ---
 
 

@@ -1,14 +1,14 @@
 ---
 id: TASK-8
 title: Add a web server
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-04-14 06:04'
-updated_date: '2026-04-15 06:02'
+updated_date: '2026-04-22 15:00'
 labels: []
 milestone: m-3
 dependencies: []
-ordinal: 5000
+ordinal: 4000
 ---
 
 

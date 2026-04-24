@@ -130,11 +130,6 @@ static esp_err_t app_attribute_update_cb(attribute::callback_type_t type,
     return ESP_OK;
 }
 
-// static void on_grid_voltage(uint16_t value)
-// {
-//     ESP_LOGI(TAG, "Grid Voltage: %u", value);
-// }
-
 extern "C" void app_main()
 {
     nvs_flash_init();
