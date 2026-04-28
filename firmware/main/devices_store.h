@@ -13,12 +13,15 @@ extern "C" {
 #define DEVICE_HOST_LEN 64
 #define DEVICES_MAX     32
 
+#define MATTER_ENDPOINT_ID_INVALID 0xFFFF
+
 typedef struct {
     char     id[DEVICE_ID_LEN];
     char     name[DEVICE_NAME_LEN];
     char     host[DEVICE_HOST_LEN];
     uint16_t port;
     uint8_t  unit_id;
+    uint16_t matter_endpoint_id;
 } device_config_t;
 
 esp_err_t devices_store_init(void);
@@ -41,6 +44,7 @@ esp_err_t devices_store_update(const char *id,
 
 esp_err_t devices_store_remove(const char *id);
 esp_err_t devices_store_clear(void);
+esp_err_t devices_store_set_endpoint_id(const char *id, uint16_t endpoint_id);
 
 #ifdef __cplusplus
 }

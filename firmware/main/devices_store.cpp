@@ -100,11 +100,12 @@ static void load_from_disk(void)
     cJSON_ArrayForEach(item, root)
     {
         if (s_count >= DEVICES_MAX) break;
-        cJSON *id     = cJSON_GetObjectItemCaseSensitive(item, "id");
-        cJSON *name   = cJSON_GetObjectItemCaseSensitive(item, "name");
-        cJSON *host   = cJSON_GetObjectItemCaseSensitive(item, "host");
-        cJSON *port   = cJSON_GetObjectItemCaseSensitive(item, "port");
-        cJSON *unitId = cJSON_GetObjectItemCaseSensitive(item, "unitId");
+        cJSON *id         = cJSON_GetObjectItemCaseSensitive(item, "id");
+        cJSON *name       = cJSON_GetObjectItemCaseSensitive(item, "name");
+        cJSON *host       = cJSON_GetObjectItemCaseSensitive(item, "host");
+        cJSON *port       = cJSON_GetObjectItemCaseSensitive(item, "port");
+        cJSON *unitId     = cJSON_GetObjectItemCaseSensitive(item, "unitId");
+        cJSON *endpointId = cJSON_GetObjectItemCaseSensitive(item, "matterEndpointId");
         if (!cJSON_IsString(id) || !cJSON_IsString(name) || !cJSON_IsString(host) ||
             !cJSON_IsNumber(port) || !cJSON_IsNumber(unitId))
         {
@@ -114,8 +115,11 @@ static void load_from_disk(void)
         strlcpy(d->id,   id->valuestring,   sizeof(d->id));
         strlcpy(d->name, name->valuestring, sizeof(d->name));
         strlcpy(d->host, host->valuestring, sizeof(d->host));
-        d->port    = (uint16_t)port->valueint;
-        d->unit_id = (uint8_t)unitId->valueint;
+        d->port               = (uint16_t)port->valueint;
+        d->unit_id            = (uint8_t)unitId->valueint;
+        d->matter_endpoint_id = cJSON_IsNumber(endpointId)
+                                    ? (uint16_t)endpointId->valueint
+                                    : MATTER_ENDPOINT_ID_INVALID;
     }
     cJSON_Delete(root);
     ESP_LOGI(TAG, "Loaded %u devices", (unsigned)s_count);
@@ -130,11 +134,12 @@ static esp_err_t persist(void)
     {
         const device_config_t *d = &s_devices[i];
         cJSON *o = cJSON_CreateObject();
-        cJSON_AddStringToObject(o, "id",     d->id);
-        cJSON_AddStringToObject(o, "name",   d->name);
-        cJSON_AddStringToObject(o, "host",   d->host);
-        cJSON_AddNumberToObject(o, "port",   d->port);
-        cJSON_AddNumberToObject(o, "unitId", d->unit_id);
+        cJSON_AddStringToObject(o, "id",               d->id);
+        cJSON_AddStringToObject(o, "name",             d->name);
+        cJSON_AddStringToObject(o, "host",             d->host);
+        cJSON_AddNumberToObject(o, "port",             d->port);
+        cJSON_AddNumberToObject(o, "unitId",           d->unit_id);
+        cJSON_AddNumberToObject(o, "matterEndpointId", d->matter_endpoint_id);
         cJSON_AddItemToArray(root, o);
     }
 
@@ -203,8 +208,9 @@ esp_err_t devices_store_add(const char *name,
     generate_id(d->id);
     strlcpy(d->name, name, sizeof(d->name));
     strlcpy(d->host, host, sizeof(d->host));
-    d->port    = port;
-    d->unit_id = unit_id;
+    d->port               = port;
+    d->unit_id            = unit_id;
+    d->matter_endpoint_id = MATTER_ENDPOINT_ID_INVALID;
 
     s_count++;
     esp_err_t err = persist();
@@ -266,4 +272,16 @@ esp_err_t devices_store_clear(void)
 {
     s_count = 0;
     return persist();
+}
+
+esp_err_t devices_store_set_endpoint_id(const char *id, uint16_t endpoint_id)
+{
+    if (!id) return ESP_ERR_INVALID_ARG;
+    for (size_t i = 0; i < s_count; ++i)
+    {
+        if (strcmp(s_devices[i].id, id) != 0) continue;
+        s_devices[i].matter_endpoint_id = endpoint_id;
+        return persist();
+    }
+    return ESP_ERR_NOT_FOUND;
 }

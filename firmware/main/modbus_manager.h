@@ -6,6 +6,7 @@
 #include "devices_store.h"
 #include "modbus_device.h"
 #include "solar_power_device.h"
+#include <esp_matter_bridge.h>
 
 class ModbusManager {
 public:
@@ -24,12 +25,20 @@ public:
 
 private:
     struct DevicePair {
-        ModbusDevice      *modbus;
-        SolarPowerDevice  *matter;
+        ModbusDevice              *modbus;
+        SolarPowerDevice          *matter;
+        esp_matter_bridge::device_t *bridge_dev;
     };
 
     ModbusManager() = default;
-    esp_matter::node_t       *m_node       = nullptr;
-    esp_matter::endpoint_t   *m_aggregator = nullptr;
+
+    static esp_err_t device_type_callback(esp_matter::endpoint_t *ep,
+                                          uint32_t device_type_id,
+                                          void *priv_data);
+
+    esp_err_t register_device(const device_config_t &config);
+
+    esp_matter::node_t       *m_node                   = nullptr;
+    uint16_t                  m_aggregator_endpoint_id = chip::kInvalidEndpointId;
     std::vector<DevicePair>   m_devices;
 };

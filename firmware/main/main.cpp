@@ -145,9 +145,6 @@ extern "C" void app_main()
     endpoint_t *agg_ep = aggregator::create(node, &agg_config, ENDPOINT_FLAG_NONE, nullptr);
     ABORT_APP_ON_FAILURE(agg_ep != nullptr, ESP_LOGE(TAG, "Failed to create aggregator endpoint"));
 
-    devices_store_init();
-    ModbusManager::instance().init(node, agg_ep);
-
     esp_err_t err = esp_matter::start(app_event_cb);
 
     if (err != ESP_OK)
@@ -155,6 +152,10 @@ extern "C" void app_main()
         ESP_LOGE(TAG, "Failed to start Matter: %d", err);
         return;
     }
+
+    devices_store_init();
+    ModbusManager::instance().init(node, agg_ep);
+
     web_server_start([]() {
         chip::Server::GetInstance().ScheduleFactoryReset();
     });

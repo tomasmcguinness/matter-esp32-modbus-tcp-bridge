@@ -5,10 +5,10 @@
 #include "esp_log.h"
 #include "esp_matter.h"
 #include "esp_matter_data_model.h"
+#include <esp_matter_bridge.h>
 
 #include <app/reporting/reporting.h>
 #include <platform/CHIPDeviceLayer.h>
-#include <clusters/BridgedDeviceBasicInformation/ClusterId.h>
 
 static const char *TAG = "solar_power_device";
 
@@ -17,6 +17,7 @@ using namespace esp_matter::cluster;
 using namespace esp_matter::endpoint;
 using namespace chip::app::Clusters;
 using namespace chip::app::Clusters::ElectricalPowerMeasurement;
+using namespace chip::app::Clusters::ElectricalPowerMeasurement::Attributes;
 
 static const Structs::MeasurementAccuracyRangeStruct::Type kVoltageRanges[] = {{
     .rangeMin      = 0,
@@ -59,54 +60,16 @@ CHIP_ERROR SolarPowerDevice::GetAccuracyByIndex(uint8_t index, Structs::Measurem
     return CHIP_NO_ERROR;
 }
 
-SolarPowerDevice::SolarPowerDevice(node_t *node,
-                                   endpoint_t *aggregator,
-                                   const device_config_t &config)
+SolarPowerDevice::SolarPowerDevice(esp_matter_bridge::device_t *dev, const device_config_t &config)
     : m_endpoint_id(0)
 {
-    bridged_node::config_t node_cfg;
-    node_cfg.bridged_device_basic_information.reachable = true;
-    endpoint_t *ep = bridged_node::create(node, &node_cfg,
-                                          ENDPOINT_FLAG_DESTROYABLE | ENDPOINT_FLAG_BRIDGE,
-                                          nullptr);
-    if (!ep) {
-        ESP_LOGE(TAG, "[%s] Failed to create bridged_node endpoint", config.id);
+    if (!dev || !dev->endpoint) {
+        ESP_LOGE(TAG, "[%s] Invalid bridge device", config.id);
         return;
     }
 
-    // solar_power::add() sets AC feature flag and creates voltage + active_current attributes.
-    // Leave config.delegate nullptr — we create the Instance ourselves below.
-    solar_power::config_t sp_cfg;
-    if (solar_power::add(ep, &sp_cfg) != ESP_OK) {
-        ESP_LOGE(TAG, "[%s] Failed to add solar_power clusters", config.id);
-        return;
-    }
+    uint16_t ep_id = endpoint::get_id(dev->endpoint);
 
-    cluster_t *bdbi = cluster::get(ep, BridgedDeviceBasicInformation::Id);
-    if (bdbi) {
-        char name[DEVICE_NAME_LEN];
-        strncpy(name, config.name, sizeof(name) - 1);
-        name[sizeof(name) - 1] = '\0';
-        bridged_device_basic_information::attribute::create_node_label(bdbi, name, strlen(name));
-    }
-
-    if (set_parent_endpoint(ep, aggregator) != ESP_OK) {
-        ESP_LOGE(TAG, "[%s] Failed to set parent endpoint", config.id);
-    }
-
-    endpoint::enable(ep);
-
-    // Run plugin server init for every cluster on this endpoint (EPM has none, but others may).
-    cluster_t *cl = cluster::get_first(ep);
-    while (cl) {
-        cluster::plugin_server_init_callback_t plugin_cb = cluster::get_plugin_server_init_callback(cl);
-        if (plugin_cb) plugin_cb();
-        cl = cluster::get_next(cl);
-    }
-
-    uint16_t ep_id = endpoint::get_id(ep);
-
-    // Build optional-attrs mask to match the attributes solar_power::add() created.
     chip::BitMask<OptionalAttributes> optional_attrs;
     optional_attrs.Set(OptionalAttributes::kOptionalAttributeVoltage);
     optional_attrs.Set(OptionalAttributes::kOptionalAttributeActiveCurrent);
@@ -118,7 +81,7 @@ SolarPowerDevice::SolarPowerDevice(node_t *node,
     m_epm_instance->Init();
 
     m_endpoint_id = ep_id;
-    ESP_LOGI(TAG, "[%s] Solar Power bridged endpoint created: ep=%u", config.id, m_endpoint_id);
+    ESP_LOGI(TAG, "[%s] EPM instance attached: ep=%u", config.id, m_endpoint_id);
 }
 
 SolarPowerDevice::~SolarPowerDevice()
