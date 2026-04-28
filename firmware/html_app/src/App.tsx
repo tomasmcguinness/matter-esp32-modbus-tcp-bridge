@@ -5,6 +5,7 @@ import Devices from './Devices.tsx'
 import AddDevice from './AddDevice.tsx'
 import EditDevice from './EditDevice.tsx'
 import Settings from './Settings.tsx'
+import Commissioning from './Commissioning.tsx'
 
 function App() {
 
@@ -25,6 +26,9 @@ function App() {
                 <NavLink className="nav-link" to="/devices">Modbus Devices</NavLink>
               </li>
               <li className="nav-item">
+                <NavLink className="nav-link" to="/commissioning">Commissioning</NavLink>
+              </li>
+              <li className="nav-item">
                 <NavLink className="nav-link" to="/settings">Settings</NavLink>
               </li>
             </ul>
@@ -37,6 +41,7 @@ function App() {
           <Route path="/devices" element={<Devices />} />
           <Route path="/devices/add" element={<AddDevice />} />
           <Route path="/devices/:id/edit" element={<EditDevice />} />
+          <Route path="/commissioning" element={<Commissioning />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </div>

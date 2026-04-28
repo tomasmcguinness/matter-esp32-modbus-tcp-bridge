@@ -54,6 +54,18 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
+  http.get('/api/matter/pairing', () => {
+    return HttpResponse.json({
+      commissioned: false,
+      qrCode: 'MT:Y3KY.ABG30003C00',
+      manualPairingCode: '34970112332',
+    })
+  }),
+
+  http.post('/api/matter/open-commissioning-window', () => {
+    return new HttpResponse(null, { status: 200 })
+  }),
+
   http.post('/api/factory-reset', () => {
     devices.splice(0, devices.length)
     return new HttpResponse(null, { status: 200 })

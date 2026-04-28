@@ -13,6 +13,10 @@
 #include "devices_store.h"
 #include "modbus_manager.h"
 
+#include <setup_payload/OnboardingCodesUtil.h>
+#include <app/server/Server.h>
+#include <platform/CHIPDeviceLayer.h>
+
 static factory_reset_cb_t s_factory_reset_cb = nullptr;
 
 static const char *TAG = "web_server";
@@ -355,6 +359,47 @@ static esp_err_t device_readings_handler(httpd_req_t *req)
     return send_json(req, root, 200);
 }
 
+static esp_err_t matter_pairing_handler(httpd_req_t *req)
+{
+    bool commissioned = false;
+    char qr_buf[128]     = {};
+    char manual_buf[32]  = {};
+
+    chip::DeviceLayer::PlatformMgr().LockChipStack();
+
+    commissioned = chip::Server::GetInstance().GetFabricTable().FabricCount() > 0;
+
+    chip::RendezvousInformationFlags rendezvous(chip::RendezvousInformationFlag::kOnNetwork);
+    chip::MutableCharSpan qr_span(qr_buf, sizeof(qr_buf) - 1);
+    chip::MutableCharSpan manual_span(manual_buf, sizeof(manual_buf) - 1);
+    GetQRCode(qr_span, rendezvous);
+    GetManualPairingCode(manual_span, rendezvous);
+
+    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "commissioned", commissioned);
+    cJSON_AddStringToObject(root, "qrCode", qr_buf);
+    cJSON_AddStringToObject(root, "manualPairingCode", manual_buf);
+    return send_json(req, root, 200);
+}
+
+static esp_err_t matter_open_window_handler(httpd_req_t *req)
+{
+    chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
+        CHIP_ERROR err = chip::Server::GetInstance().GetCommissioningWindowManager()
+            .OpenBasicCommissioningWindow(chip::System::Clock::Seconds32(180));
+        if (err != CHIP_NO_ERROR) {
+            ESP_LOGE(TAG, "OpenBasicCommissioningWindow failed: %" CHIP_ERROR_FORMAT, err.Format());
+        } else {
+            ESP_LOGI(TAG, "Commissioning window opened (180s)");
+        }
+    }, 0);
+
+    httpd_resp_set_status(req, "200 OK");
+    return httpd_resp_send(req, nullptr, 0);
+}
+
 static esp_err_t static_get_handler(httpd_req_t *req)
 {
     const char *uri = req->uri;
@@ -421,6 +466,7 @@ esp_err_t web_server_start(factory_reset_cb_t on_factory_reset)
     httpd_config_t config   = HTTPD_DEFAULT_CONFIG();
     config.server_port      = 80;
     config.lru_purge_enable = true;
+    config.max_uri_handlers = 16;
     config.uri_match_fn     = httpd_uri_match_wildcard;
     config.stack_size       = 8192;
 
@@ -478,6 +524,22 @@ esp_err_t web_server_start(factory_reset_cb_t on_factory_reset)
         .user_ctx = nullptr,
     };
     httpd_register_uri_handler(server, &device_readings_uri);
+
+    const httpd_uri_t matter_pairing_uri = {
+        .uri      = "/api/matter/pairing",
+        .method   = HTTP_GET,
+        .handler  = matter_pairing_handler,
+        .user_ctx = nullptr,
+    };
+    httpd_register_uri_handler(server, &matter_pairing_uri);
+
+    const httpd_uri_t matter_open_window_uri = {
+        .uri      = "/api/matter/open-commissioning-window",
+        .method   = HTTP_POST,
+        .handler  = matter_open_window_handler,
+        .user_ctx = nullptr,
+    };
+    httpd_register_uri_handler(server, &matter_open_window_uri);
 
     const httpd_uri_t static_uri = {
         .uri      = "/*",
