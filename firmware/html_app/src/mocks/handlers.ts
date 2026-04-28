@@ -6,6 +6,7 @@ export type Device = {
   host: string
   port: number
   unitId: number
+  endpointId: number
 }
 
 const devices: Device[] = []
@@ -15,9 +16,21 @@ export const handlers = [
     return HttpResponse.json(devices)
   }),
 
+  http.get('/api/devices/:id/readings', ({ params }) => {
+    const device = devices.find((d) => d.id === params.id)
+    if (!device) return new HttpResponse(null, { status: 404 })
+    return HttpResponse.json({
+      electricalPowerMeasurement: {
+        voltage: 243800,
+        activeCurrent: 9500,
+        activePower: 2300000,
+      },
+    })
+  }),
+
   http.post('/api/devices', async ({ request }) => {
-    const body = (await request.json()) as Omit<Device, 'id'>
-    const device: Device = { id: crypto.randomUUID(), ...body }
+    const body = (await request.json()) as Omit<Device, 'id' | 'endpointId'>
+    const device: Device = { id: crypto.randomUUID(), endpointId: 0, ...body }
     devices.push(device)
     return HttpResponse.json(device, { status: 201 })
   }),
@@ -27,7 +40,7 @@ export const handlers = [
     if (index === -1) {
       return new HttpResponse(null, { status: 404 })
     }
-    const body = (await request.json()) as Omit<Device, 'id'>
+    const body = (await request.json()) as Omit<Device, 'id' | 'endpointId'>
     devices[index] = { ...devices[index], ...body }
     return HttpResponse.json(devices[index])
   }),
@@ -37,8 +50,8 @@ export const handlers = [
     if (index === -1) {
       return new HttpResponse(null, { status: 404 })
     }
-    const [removed] = devices.splice(index, 1)
-    return HttpResponse.json(removed)
+    devices.splice(index, 1)
+    return new HttpResponse(null, { status: 204 })
   }),
 
   http.post('/api/factory-reset', () => {

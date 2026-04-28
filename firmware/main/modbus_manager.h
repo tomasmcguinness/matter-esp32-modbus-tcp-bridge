@@ -19,8 +19,18 @@ public:
     esp_err_t on_device_removed(const char *id);
     esp_err_t on_device_updated(const device_config_t &config);
 
+    struct DeviceReadings {
+        bool    voltage_valid;
+        int64_t voltage_mv;
+        bool    current_valid;
+        int64_t current_ma;
+        bool    power_valid;
+        int64_t power_mw;
+    };
+
     ModbusDevice *find(const char *id);
     uint16_t      endpoint_id(const char *id) const;
+    bool          get_readings(const char *id, DeviceReadings &out) const;
     void          clear();
 
 private:

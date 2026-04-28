@@ -13,14 +13,32 @@ public:
     ~SolarPowerDevice();
 
     void set_voltage(uint16_t raw_value);
+    void set_active_current(int16_t raw_value);
+    void set_active_power(int16_t raw_value);
 
     uint16_t endpoint_id() const { return m_endpoint_id; }
+
+    bool get_voltage_mv(int64_t &out) const {
+        if (m_voltage.IsNull()) return false;
+        out = m_voltage.Value();
+        return true;
+    }
+    bool get_active_current_ma(int64_t &out) const {
+        if (m_active_current.IsNull()) return false;
+        out = m_active_current.Value();
+        return true;
+    }
+    bool get_active_power_mw(int64_t &out) const {
+        if (m_active_power.IsNull()) return false;
+        out = m_active_power.Value();
+        return true;
+    }
 
     // Delegate overrides
     chip::app::Clusters::ElectricalPowerMeasurement::PowerModeEnum GetPowerMode() override {
         return chip::app::Clusters::ElectricalPowerMeasurement::PowerModeEnum::kAc;
     }
-    uint8_t GetNumberOfMeasurementTypes() override { return 2; }
+    uint8_t GetNumberOfMeasurementTypes() override { return 3; }
 
     CHIP_ERROR StartAccuracyRead() override { return CHIP_NO_ERROR; }
     CHIP_ERROR GetAccuracyByIndex(uint8_t index,
@@ -52,7 +70,7 @@ public:
     chip::app::DataModel::Nullable<int64_t> GetActiveCurrent() override { return m_active_current; }
     chip::app::DataModel::Nullable<int64_t> GetReactiveCurrent() override { return chip::app::DataModel::NullNullable; }
     chip::app::DataModel::Nullable<int64_t> GetApparentCurrent() override { return chip::app::DataModel::NullNullable; }
-    chip::app::DataModel::Nullable<int64_t> GetActivePower() override { return chip::app::DataModel::NullNullable; }
+    chip::app::DataModel::Nullable<int64_t> GetActivePower() override { return m_active_power; }
     chip::app::DataModel::Nullable<int64_t> GetReactivePower() override { return chip::app::DataModel::NullNullable; }
     chip::app::DataModel::Nullable<int64_t> GetApparentPower() override { return chip::app::DataModel::NullNullable; }
     chip::app::DataModel::Nullable<int64_t> GetRMSVoltage() override { return chip::app::DataModel::NullNullable; }
@@ -66,5 +84,6 @@ private:
     uint16_t m_endpoint_id = 0;
     chip::app::DataModel::Nullable<int64_t> m_voltage;
     chip::app::DataModel::Nullable<int64_t> m_active_current;
+    chip::app::DataModel::Nullable<int64_t> m_active_power;
     chip::app::Clusters::ElectricalPowerMeasurement::Instance *m_epm_instance = nullptr;
 };

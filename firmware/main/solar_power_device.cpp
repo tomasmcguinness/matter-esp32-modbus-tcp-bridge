@@ -28,8 +28,16 @@ static const Structs::MeasurementAccuracyRangeStruct::Type kVoltageRanges[] = {{
 }};
 
 static const Structs::MeasurementAccuracyRangeStruct::Type kCurrentRanges[] = {{
-    .rangeMin      = 0,
+    .rangeMin      = -100'000,
     .rangeMax      = 100'000,
+    .percentMax    = chip::MakeOptional(static_cast<chip::Percent100ths>(1000)),
+    .percentMin    = chip::MakeOptional(static_cast<chip::Percent100ths>(100)),
+    .percentTypical = chip::MakeOptional(static_cast<chip::Percent100ths>(500)),
+}};
+
+static const Structs::MeasurementAccuracyRangeStruct::Type kPowerRanges[] = {{
+    .rangeMin      = -30'000'000,
+    .rangeMax      = 30'000'000,
     .percentMax    = chip::MakeOptional(static_cast<chip::Percent100ths>(1000)),
     .percentMin    = chip::MakeOptional(static_cast<chip::Percent100ths>(100)),
     .percentTypical = chip::MakeOptional(static_cast<chip::Percent100ths>(500)),
@@ -46,9 +54,16 @@ static const Structs::MeasurementAccuracyStruct::Type kAccuracies[] = {
     {
         .measurementType   = MeasurementTypeEnum::kActiveCurrent,
         .measured          = true,
-        .minMeasuredValue  = 0,
+        .minMeasuredValue  = -100'000,
         .maxMeasuredValue  = 100'000,
         .accuracyRanges    = chip::app::DataModel::List<const Structs::MeasurementAccuracyRangeStruct::Type>(kCurrentRanges),
+    },
+    {
+        .measurementType   = MeasurementTypeEnum::kActivePower,
+        .measured          = true,
+        .minMeasuredValue  = -30'000'000,
+        .maxMeasuredValue  = 30'000'000,
+        .accuracyRanges    = chip::app::DataModel::List<const Structs::MeasurementAccuracyRangeStruct::Type>(kPowerRanges),
     },
 };
 
@@ -104,6 +119,38 @@ void SolarPowerDevice::set_voltage(uint16_t raw_value)
                 static_cast<chip::EndpointId>(arg),
                 ElectricalPowerMeasurement::Id,
                 Attributes::Voltage::Id);
+        },
+        static_cast<intptr_t>(m_endpoint_id));
+}
+
+void SolarPowerDevice::set_active_current(int16_t raw_value)
+{
+    // Solax reports current in 0.1A units (signed); Matter expects milliamps
+    auto ma = chip::app::DataModel::MakeNullable(static_cast<int64_t>(raw_value) * 100);
+    if (m_active_current == ma) return;
+    m_active_current = ma;
+    chip::DeviceLayer::PlatformMgr().ScheduleWork(
+        [](intptr_t arg) {
+            MatterReportingAttributeChangeCallback(
+                static_cast<chip::EndpointId>(arg),
+                ElectricalPowerMeasurement::Id,
+                Attributes::ActiveCurrent::Id);
+        },
+        static_cast<intptr_t>(m_endpoint_id));
+}
+
+void SolarPowerDevice::set_active_power(int16_t raw_value)
+{
+    // Solax reports power in W (signed); Matter expects milliwatts
+    auto mw = chip::app::DataModel::MakeNullable(static_cast<int64_t>(raw_value) * 1000);
+    if (m_active_power == mw) return;
+    m_active_power = mw;
+    chip::DeviceLayer::PlatformMgr().ScheduleWork(
+        [](intptr_t arg) {
+            MatterReportingAttributeChangeCallback(
+                static_cast<chip::EndpointId>(arg),
+                ElectricalPowerMeasurement::Id,
+                Attributes::ActivePower::Id);
         },
         static_cast<intptr_t>(m_endpoint_id));
 }

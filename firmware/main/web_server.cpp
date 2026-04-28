@@ -305,6 +305,56 @@ static esp_err_t factory_reset_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t device_readings_handler(httpd_req_t *req)
+{
+    // URI: /api/devices/<id>/readings
+    const char *after_prefix = req->uri + DEVICES_API_PREFIX_LEN + 1;
+    const char *slash = strchr(after_prefix, '/');
+    if (!slash || strcmp(slash, "/readings") != 0)
+    {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Not found");
+        return ESP_FAIL;
+    }
+
+    char id[DEVICE_ID_LEN];
+    size_t id_len = (size_t)(slash - after_prefix);
+    if (id_len == 0 || id_len >= sizeof(id))
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad id");
+        return ESP_FAIL;
+    }
+    memcpy(id, after_prefix, id_len);
+    id[id_len] = '\0';
+
+    ModbusManager::DeviceReadings readings;
+    if (!ModbusManager::instance().get_readings(id, readings))
+    {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Device not found");
+        return ESP_FAIL;
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *epm  = cJSON_CreateObject();
+
+    if (readings.voltage_valid)
+        cJSON_AddNumberToObject(epm, "voltage", (double)readings.voltage_mv);
+    else
+        cJSON_AddNullToObject(epm, "voltage");
+
+    if (readings.current_valid)
+        cJSON_AddNumberToObject(epm, "activeCurrent", (double)readings.current_ma);
+    else
+        cJSON_AddNullToObject(epm, "activeCurrent");
+
+    if (readings.power_valid)
+        cJSON_AddNumberToObject(epm, "activePower", (double)readings.power_mw);
+    else
+        cJSON_AddNullToObject(epm, "activePower");
+
+    cJSON_AddItemToObject(root, "electricalPowerMeasurement", epm);
+    return send_json(req, root, 200);
+}
+
 static esp_err_t static_get_handler(httpd_req_t *req)
 {
     const char *uri = req->uri;
@@ -420,6 +470,14 @@ esp_err_t web_server_start(factory_reset_cb_t on_factory_reset)
         .user_ctx = nullptr,
     };
     httpd_register_uri_handler(server, &factory_reset_uri);
+
+    const httpd_uri_t device_readings_uri = {
+        .uri      = "/api/devices/*",
+        .method   = HTTP_GET,
+        .handler  = device_readings_handler,
+        .user_ctx = nullptr,
+    };
+    httpd_register_uri_handler(server, &device_readings_uri);
 
     const httpd_uri_t static_uri = {
         .uri      = "/*",

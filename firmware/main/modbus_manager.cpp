@@ -16,9 +16,12 @@ using namespace esp_matter::endpoint;
 
 static const char *TAG = "modbus_manager";
 
-static void voltage_update_cb(uint16_t raw, void *arg)
+static void readings_update_cb(const ModbusDevice::Readings &r, void *arg)
 {
-    static_cast<SolarPowerDevice *>(arg)->set_voltage(raw);
+    auto *dev = static_cast<SolarPowerDevice *>(arg);
+    dev->set_voltage(r.voltage_raw);
+    dev->set_active_current(r.current_raw);
+    dev->set_active_power(r.power_raw);
 }
 
 ModbusManager &ModbusManager::instance()
@@ -87,7 +90,7 @@ esp_err_t ModbusManager::register_device(const device_config_t &config)
 
     auto *modbus = new ModbusDevice(config);
     auto *matter = new SolarPowerDevice(dev, config);
-    modbus->set_voltage_callback(voltage_update_cb, matter);
+    modbus->set_readings_callback(readings_update_cb, matter);
     m_devices.push_back({modbus, matter, dev});
 
     ESP_LOGI(TAG, "Registered '%s' (%s:%u) -> ep=%u",
@@ -185,4 +188,15 @@ uint16_t ModbusManager::endpoint_id(const char *id) const
     auto it = std::find_if(m_devices.begin(), m_devices.end(),
         [id](const DevicePair &p) { return strcmp(p.modbus->id(), id) == 0; });
     return it != m_devices.end() ? it->matter->endpoint_id() : 0;
+}
+
+bool ModbusManager::get_readings(const char *id, DeviceReadings &out) const
+{
+    auto it = std::find_if(m_devices.begin(), m_devices.end(),
+        [id](const DevicePair &p) { return strcmp(p.modbus->id(), id) == 0; });
+    if (it == m_devices.end()) return false;
+    out.voltage_valid = it->matter->get_voltage_mv(out.voltage_mv);
+    out.current_valid = it->matter->get_active_current_ma(out.current_ma);
+    out.power_valid   = it->matter->get_active_power_mw(out.power_mw);
+    return true;
 }

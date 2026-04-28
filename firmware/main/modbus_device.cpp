@@ -13,21 +13,24 @@ static const char *TAG = "modbus_device";
 // Modbus spec: max 125 registers per read request
 #define MODBUS_MAX_REGISTERS 125
 
-#define POLL_INTERVAL_MS  5000
-// Temporary: read Grid Voltage only. Full register mapping comes with TASK-7.
-#define REG_GRID_VOLTAGE  0x0000
+#define POLL_INTERVAL_MS     5000
+#define REG_GRID_VOLTAGE     0x0000
+#define REG_GRID_CURRENT     0x0001
+#define REG_GRID_POWER       0x000B
+// Number of input registers to read in one request (covers 0x0000..0x000B)
+#define REG_READ_COUNT       12
 
 ModbusDevice::ModbusDevice(const device_config_t &config)
     : m_config(config), m_sock(-1), m_transaction_id(0),
       m_state(ModbusConnectionState::Disconnected), m_poll_task(nullptr),
-      m_voltage_cb(nullptr), m_voltage_cb_arg(nullptr)
+      m_readings_cb(nullptr), m_readings_cb_arg(nullptr)
 {
 }
 
-void ModbusDevice::set_voltage_callback(voltage_cb_t cb, void *arg)
+void ModbusDevice::set_readings_callback(readings_cb_t cb, void *arg)
 {
-    m_voltage_cb     = cb;
-    m_voltage_cb_arg = arg;
+    m_readings_cb     = cb;
+    m_readings_cb_arg = arg;
 }
 
 ModbusDevice::~ModbusDevice()
@@ -48,11 +51,16 @@ void ModbusDevice::poll_task(void *arg)
 {
     ModbusDevice *self = static_cast<ModbusDevice *>(arg);
     while (true) {
-        uint16_t value = 0;
-        if (self->read_input_registers(REG_GRID_VOLTAGE, 1, &value) == ESP_OK) {
-            ESP_LOGI(TAG, "[%s] Grid Voltage: %u (raw)", self->m_config.id, value);
-            if (self->m_voltage_cb) {
-                self->m_voltage_cb(value, self->m_voltage_cb_arg);
+        uint16_t regs[REG_READ_COUNT] = {};
+        if (self->read_input_registers(REG_GRID_VOLTAGE, REG_READ_COUNT, regs) == ESP_OK) {
+            Readings r;
+            r.voltage_raw = regs[REG_GRID_VOLTAGE];
+            r.current_raw = static_cast<int16_t>(regs[REG_GRID_CURRENT]);
+            r.power_raw   = static_cast<int16_t>(regs[REG_GRID_POWER]);
+            ESP_LOGI(TAG, "[%s] V=%u(raw) I=%d(raw) P=%d(raw)",
+                     self->m_config.id, r.voltage_raw, r.current_raw, r.power_raw);
+            if (self->m_readings_cb) {
+                self->m_readings_cb(r, self->m_readings_cb_arg);
             }
         }
         vTaskDelay(pdMS_TO_TICKS(POLL_INTERVAL_MS));
