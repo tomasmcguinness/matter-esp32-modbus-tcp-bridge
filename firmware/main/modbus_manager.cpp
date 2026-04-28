@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include <platform/CHIPDeviceLayer.h>
 
 static const char *TAG = "modbus_manager";
 
@@ -28,7 +29,6 @@ esp_err_t ModbusManager::init(esp_matter::node_t *node, esp_matter::endpoint_t *
         auto *modbus = new ModbusDevice(*cfg);
         auto *matter = new SolarPowerDevice(m_node, m_aggregator, *cfg);
         modbus->set_voltage_callback(voltage_update_cb, matter);
-        modbus->start_polling();
         m_devices.push_back({modbus, matter});
         ESP_LOGI(TAG, "Registered device '%s' (%s:%u)", cfg->name, cfg->host, cfg->port);
     }
@@ -36,10 +36,20 @@ esp_err_t ModbusManager::init(esp_matter::node_t *node, esp_matter::endpoint_t *
     return ESP_OK;
 }
 
+void ModbusManager::start_polling()
+{
+    for (auto &pair : m_devices) {
+        pair.modbus->start_polling();
+    }
+    ESP_LOGI(TAG, "Polling started for %zu device(s)", m_devices.size());
+}
+
 esp_err_t ModbusManager::on_device_added(const device_config_t &config)
 {
     auto *modbus = new ModbusDevice(config);
+    chip::DeviceLayer::PlatformMgr().LockChipStack();
     auto *matter = new SolarPowerDevice(m_node, m_aggregator, config);
+    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
     modbus->set_voltage_callback(voltage_update_cb, matter);
     modbus->start_polling();
     m_devices.push_back({modbus, matter});
@@ -82,4 +92,11 @@ ModbusDevice *ModbusManager::find(const char *id)
     auto it = std::find_if(m_devices.begin(), m_devices.end(),
         [id](const DevicePair &p) { return strcmp(p.modbus->id(), id) == 0; });
     return it != m_devices.end() ? it->modbus : nullptr;
+}
+
+uint16_t ModbusManager::endpoint_id(const char *id) const
+{
+    auto it = std::find_if(m_devices.begin(), m_devices.end(),
+        [id](const DevicePair &p) { return strcmp(p.modbus->id(), id) == 0; });
+    return it != m_devices.end() ? it->matter->endpoint_id() : 0;
 }

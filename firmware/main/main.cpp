@@ -107,6 +107,8 @@ static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
 
         mdns_registered = true;
         ESP_LOGI(TAG, "mDNS: %s.local -> " IPSTR " with _http._tcp:%d", MDNS_DELEGATED_HOSTNAME, IP2STR(&ip_info.ip), MDNS_HTTP_PORT);
+
+        ModbusManager::instance().start_polling();
         break;
     }
     default:
@@ -143,6 +145,9 @@ extern "C" void app_main()
     endpoint_t *agg_ep = aggregator::create(node, &agg_config, ENDPOINT_FLAG_NONE, nullptr);
     ABORT_APP_ON_FAILURE(agg_ep != nullptr, ESP_LOGE(TAG, "Failed to create aggregator endpoint"));
 
+    devices_store_init();
+    ModbusManager::instance().init(node, agg_ep);
+
     esp_err_t err = esp_matter::start(app_event_cb);
 
     if (err != ESP_OK)
@@ -150,9 +155,6 @@ extern "C" void app_main()
         ESP_LOGE(TAG, "Failed to start Matter: %d", err);
         return;
     }
-
-    devices_store_init();
-    ModbusManager::instance().init(node, agg_ep);
     web_server_start([]() {
         chip::Server::GetInstance().ScheduleFactoryReset();
     });

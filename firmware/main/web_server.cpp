@@ -93,11 +93,12 @@ static esp_err_t send_json(httpd_req_t *req, cJSON *root, int status)
 static cJSON *device_to_json(const device_config_t *d)
 {
     cJSON *o = cJSON_CreateObject();
-    cJSON_AddStringToObject(o, "id",     d->id);
-    cJSON_AddStringToObject(o, "name",   d->name);
-    cJSON_AddStringToObject(o, "host",   d->host);
-    cJSON_AddNumberToObject(o, "port",   d->port);
-    cJSON_AddNumberToObject(o, "unitId", d->unit_id);
+    cJSON_AddStringToObject(o, "id",         d->id);
+    cJSON_AddStringToObject(o, "name",       d->name);
+    cJSON_AddStringToObject(o, "host",       d->host);
+    cJSON_AddNumberToObject(o, "port",       d->port);
+    cJSON_AddNumberToObject(o, "unitId",     d->unit_id);
+    cJSON_AddNumberToObject(o, "endpointId", ModbusManager::instance().endpoint_id(d->id));
     return o;
 }
 

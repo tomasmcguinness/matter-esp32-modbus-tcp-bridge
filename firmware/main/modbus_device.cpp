@@ -112,73 +112,91 @@ esp_err_t ModbusDevice::ensure_connected()
 esp_err_t ModbusDevice::send_request(uint8_t func_code, uint16_t reg_addr, uint16_t count, uint16_t *out)
 {
     if (count == 0 || count > MODBUS_MAX_REGISTERS) return ESP_ERR_INVALID_ARG;
-    if (ensure_connected() != ESP_OK) return ESP_FAIL;
 
-    uint16_t tid = ++m_transaction_id;
+    for (int attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) {
+            ESP_LOGW(TAG, "[%s] retrying after 1s", m_config.id);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
 
-    // MBAP header (6 bytes) + Unit ID + FC + Start addr (2) + Count (2)
-    uint8_t req[12];
-    req[0]  = tid >> 8;
-    req[1]  = tid & 0xFF;
-    req[2]  = 0;                 // Protocol ID high
-    req[3]  = 0;                 // Protocol ID low
-    req[4]  = 0;                 // Length high
-    req[5]  = 6;                 // Length low: unit_id(1) + FC(1) + addr(2) + count(2)
-    req[6]  = m_config.unit_id;
-    req[7]  = func_code;
-    req[8]  = reg_addr >> 8;
-    req[9]  = reg_addr & 0xFF;
-    req[10] = count >> 8;
-    req[11] = count & 0xFF;
+        if (ensure_connected() != ESP_OK) return ESP_FAIL;
 
-    int sent = 0;
-    while (sent < (int)sizeof(req)) {
-        int n = send(m_sock, req + sent, sizeof(req) - sent, 0);
-        if (n <= 0) {
-            ESP_LOGE(TAG, "[%s] send failed: %d", m_config.id, errno);
-            close_socket();
+        uint16_t tid = ++m_transaction_id;
+
+        // MBAP header (6 bytes) + Unit ID + FC + Start addr (2) + Count (2)
+        uint8_t req[12];
+        req[0]  = tid >> 8;
+        req[1]  = tid & 0xFF;
+        req[2]  = 0;
+        req[3]  = 0;
+        req[4]  = 0;
+        req[5]  = 6;
+        req[6]  = m_config.unit_id;
+        req[7]  = func_code;
+        req[8]  = reg_addr >> 8;
+        req[9]  = reg_addr & 0xFF;
+        req[10] = count >> 8;
+        req[11] = count & 0xFF;
+
+        int sent = 0;
+        bool send_ok = true;
+        while (sent < (int)sizeof(req)) {
+            int n = send(m_sock, req + sent, sizeof(req) - sent, 0);
+            if (n <= 0) {
+                ESP_LOGE(TAG, "[%s] send failed: %d", m_config.id, errno);
+                close_socket();
+                send_ok = false;
+                break;
+            }
+            sent += n;
+        }
+        if (!send_ok) continue;
+
+        // Read fixed 9-byte response prefix: 6 MBAP + unit_id + FC + byte_count/exception_code
+        uint8_t header[9];
+        int received = 0;
+        bool recv_ok = true;
+        while (received < (int)sizeof(header)) {
+            int n = recv(m_sock, header + received, sizeof(header) - received, 0);
+            if (n <= 0) {
+                ESP_LOGE(TAG, "[%s] recv header failed: %d", m_config.id, errno);
+                close_socket();
+                recv_ok = false;
+                break;
+            }
+            received += n;
+        }
+        if (!recv_ok) continue;
+
+        if (header[7] & 0x80) {
+            ESP_LOGE(TAG, "[%s] Modbus exception: FC=0x%02x code=%u", m_config.id, header[7], header[8]);
             return ESP_FAIL;
         }
-        sent += n;
-    }
 
-    // Read the fixed 9-byte response prefix: 6 MBAP + unit_id + FC + byte_count/exception_code
-    uint8_t header[9];
-    int received = 0;
-    while (received < (int)sizeof(header)) {
-        int n = recv(m_sock, header + received, sizeof(header) - received, 0);
-        if (n <= 0) {
-            ESP_LOGE(TAG, "[%s] recv header failed: %d", m_config.id, errno);
-            close_socket();
-            return ESP_FAIL;
+        int data_len = header[8];
+        uint8_t data[MODBUS_MAX_REGISTERS * 2];
+        received = 0;
+        bool data_ok = true;
+        while (received < data_len) {
+            int n = recv(m_sock, data + received, data_len - received, 0);
+            if (n <= 0) {
+                ESP_LOGE(TAG, "[%s] recv data failed: %d", m_config.id, errno);
+                close_socket();
+                data_ok = false;
+                break;
+            }
+            received += n;
         }
-        received += n;
-    }
+        if (!data_ok) continue;
 
-    if (header[7] & 0x80) {
-        ESP_LOGE(TAG, "[%s] Modbus exception: FC=0x%02x code=%u", m_config.id, header[7], header[8]);
-        return ESP_FAIL;
-    }
-
-    // header[8] is the byte count; read that many data bytes
-    int data_len = header[8];
-    uint8_t data[MODBUS_MAX_REGISTERS * 2];
-    received = 0;
-    while (received < data_len) {
-        int n = recv(m_sock, data + received, data_len - received, 0);
-        if (n <= 0) {
-            ESP_LOGE(TAG, "[%s] recv data failed: %d", m_config.id, errno);
-            close_socket();
-            return ESP_FAIL;
+        for (int i = 0; i < (int)count; i++) {
+            out[i] = ((uint16_t)data[i * 2] << 8) | data[i * 2 + 1];
         }
-        received += n;
+
+        return ESP_OK;
     }
 
-    for (int i = 0; i < (int)count; i++) {
-        out[i] = ((uint16_t)data[i * 2] << 8) | data[i * 2 + 1];
-    }
-
-    return ESP_OK;
+    return ESP_FAIL;
 }
 
 esp_err_t ModbusDevice::read_input_registers(uint16_t reg_addr, uint16_t count, uint16_t *out)

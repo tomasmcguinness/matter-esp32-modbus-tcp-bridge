@@ -7,6 +7,7 @@
 #include "esp_matter_data_model.h"
 
 #include <app/reporting/reporting.h>
+#include <platform/CHIPDeviceLayer.h>
 #include <clusters/BridgedDeviceBasicInformation/ClusterId.h>
 
 static const char *TAG = "solar_power_device";
@@ -134,5 +135,12 @@ void SolarPowerDevice::set_voltage(uint16_t raw_value)
     auto mv = chip::app::DataModel::MakeNullable(static_cast<int64_t>(raw_value) * 100);
     if (m_voltage == mv) return;
     m_voltage = mv;
-    MatterReportingAttributeChangeCallback(m_endpoint_id, ElectricalPowerMeasurement::Id, Attributes::Voltage::Id);
+    chip::DeviceLayer::PlatformMgr().ScheduleWork(
+        [](intptr_t arg) {
+            MatterReportingAttributeChangeCallback(
+                static_cast<chip::EndpointId>(arg),
+                ElectricalPowerMeasurement::Id,
+                Attributes::Voltage::Id);
+        },
+        static_cast<intptr_t>(m_endpoint_id));
 }

@@ -7,6 +7,7 @@ type Device = {
   host: string
   port: number
   unitId: number
+  endpointId: number
 }
 
 function Devices() {
@@ -56,6 +57,7 @@ function Devices() {
               <th>Host</th>
               <th>Port</th>
               <th>Unit ID</th>
+              <th>Endpoint</th>
               <th></th>
             </tr>
           </thead>
@@ -75,6 +77,7 @@ function Devices() {
                   <td>{d.host}</td>
                   <td>{d.port}</td>
                   <td>{d.unitId}</td>
+                  <td>{d.endpointId || '—'}</td>
                   <td className="text-end">
                     <button
                       type="button"
