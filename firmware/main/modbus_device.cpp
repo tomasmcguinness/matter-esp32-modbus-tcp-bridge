@@ -16,9 +16,9 @@ static const char *TAG = "modbus_device";
 #define POLL_INTERVAL_MS     5000
 #define REG_GRID_VOLTAGE     0x0000
 #define REG_GRID_CURRENT     0x0001
-#define REG_GRID_POWER       0x000B
-// Number of input registers to read in one request (covers 0x0000..0x000B)
-#define REG_READ_COUNT       12
+#define REG_AC_POWER         0x0002
+// Read 3 consecutive registers: voltage, current, AC power (0x0000..0x0002)
+#define REG_READ_COUNT       3
 
 ModbusDevice::ModbusDevice(const device_config_t &config)
     : m_config(config), m_sock(-1), m_transaction_id(0),
@@ -56,7 +56,7 @@ void ModbusDevice::poll_task(void *arg)
             Readings r;
             r.voltage_raw = regs[REG_GRID_VOLTAGE];
             r.current_raw = static_cast<int16_t>(regs[REG_GRID_CURRENT]);
-            r.power_raw   = static_cast<int16_t>(regs[REG_GRID_POWER]);
+            r.power_raw   = static_cast<int16_t>(regs[REG_AC_POWER]);
             ESP_LOGI(TAG, "[%s] V=%u(raw) I=%d(raw) P=%d(raw)",
                      self->m_config.id, r.voltage_raw, r.current_raw, r.power_raw);
             if (self->m_readings_cb) {
