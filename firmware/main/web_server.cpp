@@ -16,8 +16,16 @@
 #include <setup_payload/OnboardingCodesUtil.h>
 #include <app/server/Server.h>
 #include <platform/CHIPDeviceLayer.h>
+#include "esp_timer.h"
 
 static factory_reset_cb_t s_factory_reset_cb = nullptr;
+static volatile int64_t s_window_open_time_us = 0;
+static const int COMMISSIONING_WINDOW_SECONDS = 180;
+
+#define WS_MAX_CLIENTS 4
+static httpd_handle_t s_ws_hd = nullptr;
+static int s_ws_fds[WS_MAX_CLIENTS];
+static portMUX_TYPE s_ws_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static const char *TAG = "web_server";
 
@@ -361,13 +369,22 @@ static esp_err_t device_readings_handler(httpd_req_t *req)
 
 static esp_err_t matter_pairing_handler(httpd_req_t *req)
 {
-    bool commissioned = false;
-    char qr_buf[128]     = {};
-    char manual_buf[32]  = {};
+    char qr_buf[128]  = {};
+    char manual_buf[32] = {};
+    bool window_open  = false;
+
+    struct FabricEntry {
+        chip::FabricIndex index;
+        chip::VendorId    vendorId;
+        chip::NodeId      nodeId;
+        char              label[chip::kFabricLabelMaxLengthInBytes + 1];
+    };
+    FabricEntry fabric_entries[CHIP_CONFIG_MAX_FABRICS] = {};
+    uint8_t fabric_count = 0;
 
     chip::DeviceLayer::PlatformMgr().LockChipStack();
 
-    commissioned = chip::Server::GetInstance().GetFabricTable().FabricCount() > 0;
+    window_open = chip::Server::GetInstance().GetCommissioningWindowManager().IsCommissioningWindowOpen();
 
     chip::RendezvousInformationFlags rendezvous(chip::RendezvousInformationFlag::kOnNetwork);
     chip::MutableCharSpan qr_span(qr_buf, sizeof(qr_buf) - 1);
@@ -375,12 +392,46 @@ static esp_err_t matter_pairing_handler(httpd_req_t *req)
     GetQRCode(qr_span, rendezvous);
     GetManualPairingCode(manual_span, rendezvous);
 
+    for (const auto & fabric : chip::Server::GetInstance().GetFabricTable()) {
+        if (fabric_count >= CHIP_CONFIG_MAX_FABRICS) break;
+        auto & e = fabric_entries[fabric_count++];
+        e.index    = fabric.GetFabricIndex();
+        e.vendorId = fabric.GetVendorId();
+        e.nodeId   = fabric.GetNodeId();
+        auto label = fabric.GetFabricLabel();
+        size_t len = label.size() < sizeof(e.label) - 1 ? label.size() : sizeof(e.label) - 1;
+        memcpy(e.label, label.data(), len);
+        e.label[len] = '\0';
+    }
+
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();
 
+    int window_seconds_remaining = 0;
+    if (window_open && s_window_open_time_us > 0) {
+        int64_t elapsed = (esp_timer_get_time() - s_window_open_time_us) / 1000000LL;
+        int remaining = COMMISSIONING_WINDOW_SECONDS - (int)elapsed;
+        window_seconds_remaining = remaining > 0 ? remaining : 0;
+    }
+
     cJSON *root = cJSON_CreateObject();
-    cJSON_AddBoolToObject(root, "commissioned", commissioned);
     cJSON_AddStringToObject(root, "qrCode", qr_buf);
     cJSON_AddStringToObject(root, "manualPairingCode", manual_buf);
+    cJSON_AddNumberToObject(root, "windowSecondsRemaining", window_seconds_remaining);
+
+    cJSON *fabrics_arr = cJSON_CreateArray();
+    for (uint8_t i = 0; i < fabric_count; i++) {
+        const auto & e = fabric_entries[i];
+        cJSON *f = cJSON_CreateObject();
+        cJSON_AddNumberToObject(f, "fabricIndex", e.index);
+        cJSON_AddNumberToObject(f, "vendorId", static_cast<uint16_t>(e.vendorId));
+        cJSON_AddStringToObject(f, "label", e.label);
+        char node_id_str[20];
+        snprintf(node_id_str, sizeof(node_id_str), "0x%016llX", (unsigned long long)e.nodeId);
+        cJSON_AddStringToObject(f, "nodeId", node_id_str);
+        cJSON_AddItemToArray(fabrics_arr, f);
+    }
+    cJSON_AddItemToObject(root, "fabrics", fabrics_arr);
+
     return send_json(req, root, 200);
 }
 
@@ -388,11 +439,12 @@ static esp_err_t matter_open_window_handler(httpd_req_t *req)
 {
     chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
         CHIP_ERROR err = chip::Server::GetInstance().GetCommissioningWindowManager()
-            .OpenBasicCommissioningWindow(chip::System::Clock::Seconds32(180));
+            .OpenBasicCommissioningWindow(chip::System::Clock::Seconds32(COMMISSIONING_WINDOW_SECONDS));
         if (err != CHIP_NO_ERROR) {
             ESP_LOGE(TAG, "OpenBasicCommissioningWindow failed: %" CHIP_ERROR_FORMAT, err.Format());
         } else {
-            ESP_LOGI(TAG, "Commissioning window opened (180s)");
+            s_window_open_time_us = esp_timer_get_time();
+            ESP_LOGI(TAG, "Commissioning window opened (%ds)", COMMISSIONING_WINDOW_SECONDS);
         }
     }, 0);
 
@@ -453,9 +505,89 @@ static esp_err_t mount_spiffs(void)
     return ESP_OK;
 }
 
+static esp_err_t ws_events_handler(httpd_req_t *req)
+{
+    if (req->method == HTTP_GET) {
+        int fd = httpd_req_to_sockfd(req);
+        portENTER_CRITICAL(&s_ws_mux);
+        for (int i = 0; i < WS_MAX_CLIENTS; i++) {
+            if (s_ws_fds[i] < 0) {
+                s_ws_fds[i] = fd;
+                s_ws_hd = req->handle;
+                break;
+            }
+        }
+        portEXIT_CRITICAL(&s_ws_mux);
+        ESP_LOGI(TAG, "WS client connected fd=%d", fd);
+        return ESP_OK;
+    }
+
+    httpd_ws_frame_t frame = {};
+    esp_err_t ret = httpd_ws_recv_frame(req, &frame, 0);
+    if (ret != ESP_OK) return ret;
+    if (frame.len > 0) {
+        uint8_t *buf = (uint8_t *)malloc(frame.len);
+        if (buf) {
+            frame.payload = buf;
+            httpd_ws_recv_frame(req, &frame, frame.len);
+            free(buf);
+        }
+    }
+    if (frame.type == HTTPD_WS_TYPE_CLOSE) {
+        int fd = httpd_req_to_sockfd(req);
+        portENTER_CRITICAL(&s_ws_mux);
+        for (int i = 0; i < WS_MAX_CLIENTS; i++) {
+            if (s_ws_fds[i] == fd) { s_ws_fds[i] = -1; break; }
+        }
+        portEXIT_CRITICAL(&s_ws_mux);
+        ESP_LOGI(TAG, "WS client disconnected fd=%d", fd);
+    }
+    return ESP_OK;
+}
+
+void web_server_notify_ws_event(const char *event_json)
+{
+    if (s_ws_hd == nullptr) return;
+
+    int fds[WS_MAX_CLIENTS];
+    portENTER_CRITICAL(&s_ws_mux);
+    memcpy(fds, s_ws_fds, sizeof(fds));
+    portEXIT_CRITICAL(&s_ws_mux);
+
+    httpd_ws_frame_t frame = {
+        .final      = true,
+        .fragmented = false,
+        .type       = HTTPD_WS_TYPE_TEXT,
+        .payload    = (uint8_t *)event_json,
+        .len        = strlen(event_json),
+    };
+
+    for (int i = 0; i < WS_MAX_CLIENTS; i++) {
+        if (fds[i] < 0) continue;
+        if (httpd_ws_get_fd_info(s_ws_hd, fds[i]) != HTTPD_WS_CLIENT_WEBSOCKET) {
+            portENTER_CRITICAL(&s_ws_mux);
+            for (int j = 0; j < WS_MAX_CLIENTS; j++) {
+                if (s_ws_fds[j] == fds[i]) { s_ws_fds[j] = -1; break; }
+            }
+            portEXIT_CRITICAL(&s_ws_mux);
+            continue;
+        }
+        esp_err_t err = httpd_ws_send_frame_async(s_ws_hd, fds[i], &frame);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "WS send to fd=%d failed: %s", fds[i], esp_err_to_name(err));
+            portENTER_CRITICAL(&s_ws_mux);
+            for (int j = 0; j < WS_MAX_CLIENTS; j++) {
+                if (s_ws_fds[j] == fds[i]) { s_ws_fds[j] = -1; break; }
+            }
+            portEXIT_CRITICAL(&s_ws_mux);
+        }
+    }
+}
+
 esp_err_t web_server_start(factory_reset_cb_t on_factory_reset)
 {
     s_factory_reset_cb = on_factory_reset;
+    for (int i = 0; i < WS_MAX_CLIENTS; i++) s_ws_fds[i] = -1;
     esp_err_t err = mount_spiffs();
     if (err != ESP_OK)
     {
@@ -524,6 +656,15 @@ esp_err_t web_server_start(factory_reset_cb_t on_factory_reset)
         .user_ctx = nullptr,
     };
     httpd_register_uri_handler(server, &device_readings_uri);
+
+    const httpd_uri_t matter_events_uri = {
+        .uri          = "/api/matter/events",
+        .method       = HTTP_GET,
+        .handler      = ws_events_handler,
+        .user_ctx     = nullptr,
+        .is_websocket = true,
+    };
+    httpd_register_uri_handler(server, &matter_events_uri);
 
     const httpd_uri_t matter_pairing_uri = {
         .uri      = "/api/matter/pairing",

@@ -26,7 +26,7 @@ function App() {
                 <NavLink className="nav-link" to="/devices">Modbus Devices</NavLink>
               </li>
               <li className="nav-item">
-                <NavLink className="nav-link" to="/commissioning">Commissioning</NavLink>
+                <NavLink className="nav-link" to="/commissioning">Matter</NavLink>
               </li>
               <li className="nav-item">
                 <NavLink className="nav-link" to="/settings">Settings</NavLink>

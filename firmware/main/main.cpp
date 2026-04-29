@@ -44,6 +44,7 @@ static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
         break;
     case chip::DeviceLayer::DeviceEventType::kCommissioningWindowClosed:
         ESP_LOGI(TAG, "Commissioning window closed");
+        web_server_notify_ws_event("{\"type\":\"window_closed\"}");
         break;
     case chip::DeviceLayer::DeviceEventType::kCommissioningWindowOpened:
         ESP_LOGI(TAG, "Commissioning window opened");

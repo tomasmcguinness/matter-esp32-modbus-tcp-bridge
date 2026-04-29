@@ -48,3 +48,6 @@ CONFIG_ENABLE_MATTER_OVER_THREAD=n
 # Disable BLE commissioning — not needed for on-network
 CONFIG_BT_ENABLED=n
 CONFIG_ENABLE_CHIPOBLE=n
+
+# Enable WebSocket support in the HTTP server
+CONFIG_HTTPD_WS_SUPPORT=y
