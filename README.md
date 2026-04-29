@@ -2,17 +2,14 @@
 
 Designed for the ESP32-S3-ETH from Waveshare.
 
-Compile the web application
+> ![NOTE]
+> This project only supports the Solax X1-G4 inverter
 
-```
-cd html_app
-npm run build
-```
-
-Then perform a build and flash
+From your esp-idf environment, compile and flash the fireware.
 
 ```
 idf.py build flash monitor
 ```
 
-Once flashed and connected via an Ethernet cable, you can open http://modbus-adapter.local in your browser
+Once flashed and connected with an Ethernet cable, you can open http://modbus-adapter.local in your browser.
+
