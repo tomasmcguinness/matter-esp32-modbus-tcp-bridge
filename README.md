@@ -1,6 +1,6 @@
 # Modbus -> Matter Bridge
 
-Designed for the ESP32-S3-ETH from Waveshare.
+Designed for the ESP32-S3-ETH from Waveshare, this project will create Matter devices for any connected Modbus devices. It will act as a bridge between the two ecosystems, allowing you to easily connect your devices to your Matter ecosystem.
 
 > [!NOTE]
 > This project only supports the Solax X1-G4 inverter at this time. I have plans to expand support.
