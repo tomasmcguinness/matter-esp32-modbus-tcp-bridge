@@ -1,4 +1,4 @@
-# matter-esp32-modbus-tcp-adapter
+# Modbus -> Matter Bridge
 
 Designed for the ESP32-S3-ETH from Waveshare.
 
