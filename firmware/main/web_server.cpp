@@ -306,7 +306,8 @@ static esp_err_t factory_reset_handler(httpd_req_t *req)
 {
     ModbusManager::instance().clear();
     devices_store_clear();
-
+    esp_matter_bridge::factory_reset();
+    
     httpd_resp_set_status(req, "200 OK");
     httpd_resp_send(req, nullptr, 0);
 
@@ -364,6 +365,20 @@ static esp_err_t device_readings_handler(httpd_req_t *req)
         cJSON_AddNullToObject(epm, "activePower");
 
     cJSON_AddItemToObject(root, "electricalPowerMeasurement", epm);
+
+    auto add_pv_section = [&](const char *key, bool v_valid, int64_t v_mv, bool i_valid, int64_t i_ma) {
+        cJSON *pv = cJSON_CreateObject();
+        if (v_valid) cJSON_AddNumberToObject(pv, "voltage", (double)v_mv);
+        else         cJSON_AddNullToObject(pv, "voltage");
+        if (i_valid) cJSON_AddNumberToObject(pv, "activeCurrent", (double)i_ma);
+        else         cJSON_AddNullToObject(pv, "activeCurrent");
+        cJSON_AddItemToObject(root, key, pv);
+    };
+    add_pv_section("pv1", readings.pv1_voltage_valid, readings.pv1_voltage_mv,
+                           readings.pv1_current_valid, readings.pv1_current_ma);
+    add_pv_section("pv2", readings.pv2_voltage_valid, readings.pv2_voltage_mv,
+                           readings.pv2_current_valid, readings.pv2_current_ma);
+
     return send_json(req, root, 200);
 }
 

@@ -26,9 +26,13 @@ public:
     esp_err_t read_holding_registers(uint16_t reg_addr, uint16_t count, uint16_t *out);
 
     struct Readings {
-        uint16_t voltage_raw;  // 0.1 V units
-        int16_t  current_raw;  // 0.1 A units, signed
-        int16_t  power_raw;    // W units, signed
+        uint16_t voltage_raw;      // 0.1 V units
+        int16_t  current_raw;      // 0.1 A units, signed
+        int16_t  power_raw;        // W units, signed
+        uint16_t pv1_voltage_raw;  // 0.1 V units
+        uint16_t pv1_current_raw;  // 0.1 A units
+        uint16_t pv2_voltage_raw;  // 0.1 V units
+        uint16_t pv2_current_raw;  // 0.1 A units
     };
     typedef void (*readings_cb_t)(const Readings &readings, void *arg);
     void set_readings_callback(readings_cb_t cb, void *arg);

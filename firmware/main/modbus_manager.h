@@ -6,6 +6,7 @@
 #include "devices_store.h"
 #include "modbus_device.h"
 #include "solar_power_device.h"
+#include "electrical_sensor_device.h"
 #include <esp_matter_bridge.h>
 
 class ModbusManager {
@@ -26,6 +27,20 @@ public:
         int64_t current_ma;
         bool    power_valid;
         int64_t power_mw;
+        bool    pv1_voltage_valid;
+        int64_t pv1_voltage_mv;
+        bool    pv1_current_valid;
+        int64_t pv1_current_ma;
+        bool    pv2_voltage_valid;
+        int64_t pv2_voltage_mv;
+        bool    pv2_current_valid;
+        int64_t pv2_current_ma;
+    };
+
+    struct ReadingsArg {
+        SolarPowerDevice       *solar;
+        ElectricalSensorDevice *pv1;
+        ElectricalSensorDevice *pv2;
     };
 
     ModbusDevice *find(const char *id);
@@ -34,10 +49,16 @@ public:
     void          clear();
 
 private:
+
     struct DevicePair {
-        ModbusDevice              *modbus;
-        SolarPowerDevice          *matter;
+        ModbusDevice               *modbus;
+        SolarPowerDevice           *matter;
+        ElectricalSensorDevice     *pv1;
+        ElectricalSensorDevice     *pv2;
         esp_matter_bridge::device_t *bridge_dev;
+        esp_matter_bridge::device_t *pv1_bridge_dev;
+        esp_matter_bridge::device_t *pv2_bridge_dev;
+        ReadingsArg                *readings_arg;
     };
 
     ModbusManager() = default;

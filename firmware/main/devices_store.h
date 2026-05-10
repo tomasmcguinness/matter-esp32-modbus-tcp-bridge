@@ -22,6 +22,8 @@ typedef struct {
     uint16_t port;
     uint8_t  unit_id;
     uint16_t matter_endpoint_id;
+    uint16_t pv1_endpoint_id;
+    uint16_t pv2_endpoint_id;
 } device_config_t;
 
 esp_err_t devices_store_init(void);
@@ -45,6 +47,7 @@ esp_err_t devices_store_update(const char *id,
 esp_err_t devices_store_remove(const char *id);
 esp_err_t devices_store_clear(void);
 esp_err_t devices_store_set_endpoint_id(const char *id, uint16_t endpoint_id);
+esp_err_t devices_store_set_pv_endpoint_ids(const char *id, uint16_t pv1_ep, uint16_t pv2_ep);
 
 #ifdef __cplusplus
 }

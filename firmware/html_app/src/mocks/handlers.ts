@@ -25,6 +25,14 @@ export const handlers = [
         activeCurrent: 9500,
         activePower: 2300000,
       },
+      pv1: {
+        voltage: 350000,
+        activeCurrent: 8200,
+      },
+      pv2: {
+        voltage: 348000,
+        activeCurrent: 8100,
+      },
     })
   }),
 

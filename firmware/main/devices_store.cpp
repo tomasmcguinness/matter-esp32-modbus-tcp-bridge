@@ -105,7 +105,9 @@ static void load_from_disk(void)
         cJSON *host       = cJSON_GetObjectItemCaseSensitive(item, "host");
         cJSON *port       = cJSON_GetObjectItemCaseSensitive(item, "port");
         cJSON *unitId     = cJSON_GetObjectItemCaseSensitive(item, "unitId");
-        cJSON *endpointId = cJSON_GetObjectItemCaseSensitive(item, "matterEndpointId");
+        cJSON *endpointId  = cJSON_GetObjectItemCaseSensitive(item, "matterEndpointId");
+        cJSON *pv1EpId     = cJSON_GetObjectItemCaseSensitive(item, "pv1EndpointId");
+        cJSON *pv2EpId     = cJSON_GetObjectItemCaseSensitive(item, "pv2EndpointId");
         if (!cJSON_IsString(id) || !cJSON_IsString(name) || !cJSON_IsString(host) ||
             !cJSON_IsNumber(port) || !cJSON_IsNumber(unitId))
         {
@@ -119,6 +121,12 @@ static void load_from_disk(void)
         d->unit_id            = (uint8_t)unitId->valueint;
         d->matter_endpoint_id = cJSON_IsNumber(endpointId)
                                     ? (uint16_t)endpointId->valueint
+                                    : MATTER_ENDPOINT_ID_INVALID;
+        d->pv1_endpoint_id    = cJSON_IsNumber(pv1EpId)
+                                    ? (uint16_t)pv1EpId->valueint
+                                    : MATTER_ENDPOINT_ID_INVALID;
+        d->pv2_endpoint_id    = cJSON_IsNumber(pv2EpId)
+                                    ? (uint16_t)pv2EpId->valueint
                                     : MATTER_ENDPOINT_ID_INVALID;
     }
     cJSON_Delete(root);
@@ -140,6 +148,8 @@ static esp_err_t persist(void)
         cJSON_AddNumberToObject(o, "port",             d->port);
         cJSON_AddNumberToObject(o, "unitId",           d->unit_id);
         cJSON_AddNumberToObject(o, "matterEndpointId", d->matter_endpoint_id);
+        cJSON_AddNumberToObject(o, "pv1EndpointId",    d->pv1_endpoint_id);
+        cJSON_AddNumberToObject(o, "pv2EndpointId",    d->pv2_endpoint_id);
         cJSON_AddItemToArray(root, o);
     }
 
@@ -211,6 +221,8 @@ esp_err_t devices_store_add(const char *name,
     d->port               = port;
     d->unit_id            = unit_id;
     d->matter_endpoint_id = MATTER_ENDPOINT_ID_INVALID;
+    d->pv1_endpoint_id    = MATTER_ENDPOINT_ID_INVALID;
+    d->pv2_endpoint_id    = MATTER_ENDPOINT_ID_INVALID;
 
     s_count++;
     esp_err_t err = persist();
@@ -281,6 +293,19 @@ esp_err_t devices_store_set_endpoint_id(const char *id, uint16_t endpoint_id)
     {
         if (strcmp(s_devices[i].id, id) != 0) continue;
         s_devices[i].matter_endpoint_id = endpoint_id;
+        return persist();
+    }
+    return ESP_ERR_NOT_FOUND;
+}
+
+esp_err_t devices_store_set_pv_endpoint_ids(const char *id, uint16_t pv1_ep, uint16_t pv2_ep)
+{
+    if (!id) return ESP_ERR_INVALID_ARG;
+    for (size_t i = 0; i < s_count; ++i)
+    {
+        if (strcmp(s_devices[i].id, id) != 0) continue;
+        s_devices[i].pv1_endpoint_id = pv1_ep;
+        s_devices[i].pv2_endpoint_id = pv2_ep;
         return persist();
     }
     return ESP_ERR_NOT_FOUND;

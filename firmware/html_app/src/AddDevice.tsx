@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router'
 
 function AddDevice() {
   const navigate = useNavigate()
-  const [name, setName] = useState('')
-  const [host, setHost] = useState('')
+  const [name, setName] = useState('Solax Inverter')
+  const [host, setHost] = useState('192.168.1.164')
   const [port, setPort] = useState(502)
   const [unitId, setUnitId] = useState(1)
   const [submitting, setSubmitting] = useState(false)

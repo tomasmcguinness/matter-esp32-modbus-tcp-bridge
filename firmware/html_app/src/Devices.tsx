@@ -53,6 +53,7 @@ function Devices() {
         <table className="table">
           <thead>
             <tr>
+              <th>ID</th>
               <th>Name</th>
               <th>Host</th>
               <th>Port</th>
@@ -64,7 +65,7 @@ function Devices() {
           <tbody>
             {devices.length === 0 ? (
               <tr>
-                <td colSpan={5}>No devices configured.</td>
+                <td colSpan={6}>No devices configured.</td>
               </tr>
             ) : (
               devices.map((d) => (
@@ -73,6 +74,7 @@ function Devices() {
                   onClick={() => navigate(`/devices/${d.id}/edit`)}
                   style={{ cursor: 'pointer' }}
                 >
+                  <td>{d.id}</td>
                   <td>{d.name}</td>
                   <td>{d.host}</td>
                   <td>{d.port}</td>

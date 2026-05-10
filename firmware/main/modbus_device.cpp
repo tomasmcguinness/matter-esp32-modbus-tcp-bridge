@@ -17,8 +17,11 @@ static const char *TAG = "modbus_device";
 #define REG_GRID_VOLTAGE     0x0000
 #define REG_GRID_CURRENT     0x0001
 #define REG_AC_POWER         0x0002
-// Read 3 consecutive registers: voltage, current, AC power (0x0000..0x0002)
-#define REG_READ_COUNT       3
+#define REG_PV1_VOLTAGE      0x0006
+#define REG_PV1_CURRENT      0x0007
+#define REG_PV2_VOLTAGE      0x0008
+#define REG_PV2_CURRENT      0x0009
+#define REG_READ_COUNT       10
 
 ModbusDevice::ModbusDevice(const device_config_t &config)
     : m_config(config), m_sock(-1), m_transaction_id(0),
@@ -54,11 +57,17 @@ void ModbusDevice::poll_task(void *arg)
         uint16_t regs[REG_READ_COUNT] = {};
         if (self->read_input_registers(REG_GRID_VOLTAGE, REG_READ_COUNT, regs) == ESP_OK) {
             Readings r;
-            r.voltage_raw = regs[REG_GRID_VOLTAGE];
-            r.current_raw = static_cast<int16_t>(regs[REG_GRID_CURRENT]);
-            r.power_raw   = static_cast<int16_t>(regs[REG_AC_POWER]);
-            ESP_LOGI(TAG, "[%s] V=%u(raw) I=%d(raw) P=%d(raw)",
-                     self->m_config.id, r.voltage_raw, r.current_raw, r.power_raw);
+            r.voltage_raw     = regs[REG_GRID_VOLTAGE];
+            r.current_raw     = static_cast<int16_t>(regs[REG_GRID_CURRENT]);
+            r.power_raw       = static_cast<int16_t>(regs[REG_AC_POWER]);
+            r.pv1_voltage_raw = regs[REG_PV1_VOLTAGE];
+            r.pv1_current_raw = regs[REG_PV1_CURRENT];
+            r.pv2_voltage_raw = regs[REG_PV2_VOLTAGE];
+            r.pv2_current_raw = regs[REG_PV2_CURRENT];
+            ESP_LOGI(TAG, "[%s] V=%u I=%d P=%d PV1=%uV/%uA PV2=%uV/%uA (raw)",
+                     self->m_config.id, r.voltage_raw, r.current_raw, r.power_raw,
+                     r.pv1_voltage_raw, r.pv1_current_raw,
+                     r.pv2_voltage_raw, r.pv2_current_raw);
             if (self->m_readings_cb) {
                 self->m_readings_cb(r, self->m_readings_cb_arg);
             }
