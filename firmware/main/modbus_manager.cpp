@@ -31,8 +31,8 @@ ModbusManager &ModbusManager::instance()
 }
 
 esp_err_t ModbusManager::device_type_callback(esp_matter::endpoint_t *ep,
-                                               uint32_t device_type_id,
-                                               void *priv_data)
+                                              uint32_t device_type_id,
+                                              void *priv_data)
 {
     if (device_type_id != ESP_MATTER_SOLAR_POWER_DEVICE_TYPE_ID) {
         ESP_LOGE(TAG, "Unsupported device type: 0x%08" PRIx32, device_type_id);

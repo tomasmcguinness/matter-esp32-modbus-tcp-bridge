@@ -33,8 +33,6 @@ using namespace esp_matter::endpoint;
 
 using namespace chip::app::Clusters;
 
-//static uint16_t electrical_sensor_endpoint_id = 0;
-
 static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
 {
     switch (event->Type)
@@ -155,6 +153,7 @@ extern "C" void app_main()
     }
 
     devices_store_init();
+    
     ModbusManager::instance().init(node, agg_ep);
 
     web_server_start([]() {
