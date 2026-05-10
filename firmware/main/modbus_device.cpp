@@ -17,10 +17,10 @@ static const char *TAG = "modbus_device";
 #define REG_GRID_VOLTAGE     0x0000
 #define REG_GRID_CURRENT     0x0001
 #define REG_AC_POWER         0x0002
-#define REG_PV1_VOLTAGE      0x0006
-#define REG_PV1_CURRENT      0x0007
-#define REG_PV2_VOLTAGE      0x0008
-#define REG_PV2_CURRENT      0x0009
+#define REG_PV1_VOLTAGE      0x0003
+#define REG_PV1_CURRENT      0x0005
+#define REG_PV2_VOLTAGE      0x0004
+#define REG_PV2_CURRENT      0x0006
 #define REG_READ_COUNT       10
 
 ModbusDevice::ModbusDevice(const device_config_t &config)

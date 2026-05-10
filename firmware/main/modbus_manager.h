@@ -39,8 +39,6 @@ public:
 
     struct ReadingsArg {
         SolarPowerDevice       *solar;
-        ElectricalSensorDevice *pv1;
-        ElectricalSensorDevice *pv2;
     };
 
     ModbusDevice *find(const char *id);
@@ -51,14 +49,14 @@ public:
 private:
 
     struct DevicePair {
-        ModbusDevice               *modbus;
-        SolarPowerDevice           *matter;
-        ElectricalSensorDevice     *pv1;
-        ElectricalSensorDevice     *pv2;
+        ModbusDevice                *modbus;
+        SolarPowerDevice            *matter;
+        //ElectricalSensorDevice      *pv1;
+        //ElectricalSensorDevice      *pv2;
         esp_matter_bridge::device_t *bridge_dev;
-        esp_matter_bridge::device_t *pv1_bridge_dev;
-        esp_matter_bridge::device_t *pv2_bridge_dev;
-        ReadingsArg                *readings_arg;
+        //esp_matter_bridge::device_t *pv1_bridge_dev;
+        //esp_matter_bridge::device_t *pv2_bridge_dev;
+        ReadingsArg                 *readings_arg;
     };
 
     ModbusManager() = default;
