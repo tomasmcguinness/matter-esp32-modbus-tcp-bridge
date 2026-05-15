@@ -13,7 +13,8 @@ extern "C" {
 #define DEVICE_HOST_LEN 64
 #define DEVICES_MAX     32
 
-#define MATTER_ENDPOINT_ID_INVALID 0xFFFF
+#define MATTER_ENDPOINT_ID_INVALID   0xFFFF
+#define MATTER_STRUCTURE_JSON_LEN    1024
 
 typedef struct {
     char     id[DEVICE_ID_LEN];
@@ -21,9 +22,7 @@ typedef struct {
     char     host[DEVICE_HOST_LEN];
     uint16_t port;
     uint8_t  unit_id;
-    uint16_t matter_endpoint_id;
-    uint16_t pv1_endpoint_id;
-    uint16_t pv2_endpoint_id;
+    char     matter_structure_json[MATTER_STRUCTURE_JSON_LEN];
 } device_config_t;
 
 esp_err_t devices_store_init(void);
@@ -35,6 +34,7 @@ esp_err_t devices_store_add(const char *name,
                             const char *host,
                             uint16_t port,
                             uint8_t unit_id,
+                            const char *matter_structure_json,
                             device_config_t *out);
 
 esp_err_t devices_store_update(const char *id,
@@ -42,12 +42,14 @@ esp_err_t devices_store_update(const char *id,
                                const char *host,
                                uint16_t port,
                                uint8_t unit_id,
+                               const char *matter_structure_json,
                                device_config_t *out);
 
 esp_err_t devices_store_remove(const char *id);
 esp_err_t devices_store_clear(void);
-esp_err_t devices_store_set_endpoint_id(const char *id, uint16_t endpoint_id);
-esp_err_t devices_store_set_pv_endpoint_ids(const char *id, uint16_t pv1_ep, uint16_t pv2_ep);
+esp_err_t devices_store_update_matter_structure(const char *id, const char *matter_structure_json);
+
+const device_config_t *devices_store_find(const char *id);
 
 #ifdef __cplusplus
 }

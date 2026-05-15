@@ -173,7 +173,7 @@ function Commissioning() {
               </tbody>
             </table>
           )}
-          <button className="btn btn-outline-primary btn-sm" onClick={openWindow} disabled={opening}>
+          <button className="btn btn-primary" onClick={openWindow} disabled={opening}>
             {opening ? 'Opening…' : 'Open Commissioning Window'}
           </button>
         </>

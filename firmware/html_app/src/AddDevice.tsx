@@ -1,6 +1,25 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 
+const HARDCODED_MATTER_STRUCTURE = {
+  endpoints: [
+    {
+      deviceTypes: [0x0017], //, 0x0510],
+      mappings: [
+        { function: 4, address: 0x0000, cluster: 0x0091, attribute: 0x0008 }, // Voltage
+        { function: 4, address: 0x0001, cluster: 0x0091, attribute: 0x0005 }, // ActiveCurrent
+        { function: 4, address: 0x0002, cluster: 0x0091, attribute: 0x0002 }, // ActivePower
+      ],
+      // This "parts" section isn't processed yet, but it allows us to define multiple logical devices within one physical device. 
+      // For a solar power device, this would have multiple electrical sensors to reprsent PV strings
+      // or a battery.
+      "parts": [
+        { "deviceTypes": [0x0510], "mappings": [] }
+      ]
+    },
+  ],
+}
+
 function AddDevice() {
   const navigate = useNavigate()
   const [name, setName] = useState('Solax Inverter')
@@ -18,7 +37,7 @@ function AddDevice() {
       const res = await fetch('/api/devices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, host, port, unitId }),
+        body: JSON.stringify({ name, host, port, unitId, matter_structure: HARDCODED_MATTER_STRUCTURE }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       navigate('/devices')

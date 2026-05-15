@@ -11,7 +11,7 @@
 #include "cJSON.h"
 
 #include "devices_store.h"
-#include "modbus_manager.h"
+#include "device_manager.h"
 
 #include <setup_payload/OnboardingCodesUtil.h>
 #include <app/server/Server.h>
@@ -84,7 +84,7 @@ static esp_err_t send_file(httpd_req_t *req, const char *fs_path)
 
 #define DEVICES_API_PREFIX     "/api/devices"
 #define DEVICES_API_PREFIX_LEN 12
-#define MAX_POST_BODY          1024
+#define MAX_POST_BODY          2048
 
 static esp_err_t send_json(httpd_req_t *req, cJSON *root, int status)
 {
@@ -105,12 +105,15 @@ static esp_err_t send_json(httpd_req_t *req, cJSON *root, int status)
 static cJSON *device_to_json(const device_config_t *d)
 {
     cJSON *o = cJSON_CreateObject();
-    cJSON_AddStringToObject(o, "id",         d->id);
-    cJSON_AddStringToObject(o, "name",       d->name);
-    cJSON_AddStringToObject(o, "host",       d->host);
-    cJSON_AddNumberToObject(o, "port",       d->port);
-    cJSON_AddNumberToObject(o, "unitId",     d->unit_id);
-    cJSON_AddNumberToObject(o, "endpointId", ModbusManager::instance().endpoint_id(d->id));
+    cJSON_AddStringToObject(o, "id",     d->id);
+    cJSON_AddStringToObject(o, "name",   d->name);
+    cJSON_AddStringToObject(o, "host",   d->host);
+    cJSON_AddNumberToObject(o, "port",   d->port);
+    cJSON_AddNumberToObject(o, "unitId", d->unit_id);
+    if (d->matter_structure_json[0] != '\0') {
+        cJSON *ms = cJSON_Parse(d->matter_structure_json);
+        if (ms) cJSON_AddItemToObject(o, "matter_structure", ms);
+    }
     return o;
 }
 
@@ -126,19 +129,27 @@ static esp_err_t devices_get_handler(httpd_req_t *req)
 
 static esp_err_t devices_post_handler(httpd_req_t *req)
 {
+    ESP_LOGI(TAG, "Handling devices POST %s", req->uri);
+
     if (req->content_len <= 0 || req->content_len > MAX_POST_BODY)
     {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid body");
         return ESP_FAIL;
     }
 
-    char buf[MAX_POST_BODY + 1];
+    char *buf = (char *)malloc(req->content_len + 1);
+    if (!buf)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OOM");
+        return ESP_FAIL;
+    }
     int received = 0;
     while (received < req->content_len)
     {
         int r = httpd_req_recv(req, buf + received, req->content_len - received);
         if (r <= 0)
         {
+            free(buf);
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Recv failed");
             return ESP_FAIL;
         }
@@ -147,29 +158,42 @@ static esp_err_t devices_post_handler(httpd_req_t *req)
     buf[received] = '\0';
 
     cJSON *root = cJSON_Parse(buf);
+    free(buf);
     if (!root)
     {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad JSON");
         return ESP_FAIL;
     }
-    cJSON *name   = cJSON_GetObjectItemCaseSensitive(root, "name");
-    cJSON *host   = cJSON_GetObjectItemCaseSensitive(root, "host");
-    cJSON *port   = cJSON_GetObjectItemCaseSensitive(root, "port");
-    cJSON *unitId = cJSON_GetObjectItemCaseSensitive(root, "unitId");
+    cJSON *name             = cJSON_GetObjectItemCaseSensitive(root, "name");
+    cJSON *host             = cJSON_GetObjectItemCaseSensitive(root, "host");
+    cJSON *port             = cJSON_GetObjectItemCaseSensitive(root, "port");
+    cJSON *unitId           = cJSON_GetObjectItemCaseSensitive(root, "unitId");
+    cJSON *matter_structure = cJSON_GetObjectItemCaseSensitive(root, "matter_structure");
     if (!cJSON_IsString(name) || !cJSON_IsString(host) ||
-        !cJSON_IsNumber(port) || !cJSON_IsNumber(unitId))
+        !cJSON_IsNumber(port) || !cJSON_IsNumber(unitId) ||
+        !cJSON_IsObject(matter_structure))
     {
         cJSON_Delete(root);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing fields");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or invalid fields");
+        return ESP_FAIL;
+    }
+
+    char *ms_text = cJSON_PrintUnformatted(matter_structure);
+    if (!ms_text)
+    {
+        cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OOM");
         return ESP_FAIL;
     }
 
     device_config_t created;
-    esp_err_t err = devices_store_add(name->valuestring,
-                                      host->valuestring,
-                                      (uint16_t)port->valueint,
-                                      (uint8_t)unitId->valueint,
-                                      &created);
+    esp_err_t err = DeviceManager::instance().add_device(name->valuestring,
+                                                         host->valuestring,
+                                                         (uint16_t)port->valueint,
+                                                         (uint8_t)unitId->valueint,
+                                                         ms_text,
+                                                         &created);
+    free(ms_text);
     cJSON_Delete(root);
 
     if (err == ESP_ERR_NO_MEM)
@@ -179,10 +203,9 @@ static esp_err_t devices_post_handler(httpd_req_t *req)
     }
     if (err != ESP_OK)
     {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Persist failed");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to add device");
         return ESP_FAIL;
     }
-    ModbusManager::instance().on_device_added(created);
     return send_json(req, device_to_json(&created), 201);
 }
 
@@ -216,6 +239,8 @@ static const char *extract_id(const char *uri)
 
 static esp_err_t devices_put_handler(httpd_req_t *req)
 {
+    ESP_LOGI(TAG, "Handling devices PUT %s", req->uri);
+
     const char *id = extract_id(req->uri);
     if (!id)
     {
@@ -223,38 +248,57 @@ static esp_err_t devices_put_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    char buf[MAX_POST_BODY + 1];
-    if (read_body(req, buf, sizeof(buf)) != ESP_OK)
+    char *buf = (char *)malloc(MAX_POST_BODY + 1);
+    if (!buf)
     {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OOM");
+        return ESP_FAIL;
+    }
+    if (read_body(req, buf, MAX_POST_BODY + 1) != ESP_OK)
+    {
+        free(buf);
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid body");
         return ESP_FAIL;
     }
 
     cJSON *root = cJSON_Parse(buf);
+    free(buf);
     if (!root)
     {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad JSON");
         return ESP_FAIL;
     }
-    cJSON *name   = cJSON_GetObjectItemCaseSensitive(root, "name");
-    cJSON *host   = cJSON_GetObjectItemCaseSensitive(root, "host");
-    cJSON *port   = cJSON_GetObjectItemCaseSensitive(root, "port");
-    cJSON *unitId = cJSON_GetObjectItemCaseSensitive(root, "unitId");
+    cJSON *name             = cJSON_GetObjectItemCaseSensitive(root, "name");
+    cJSON *host             = cJSON_GetObjectItemCaseSensitive(root, "host");
+    cJSON *port             = cJSON_GetObjectItemCaseSensitive(root, "port");
+    cJSON *unitId           = cJSON_GetObjectItemCaseSensitive(root, "unitId");
+    cJSON *matter_structure = cJSON_GetObjectItemCaseSensitive(root, "matter_structure");
     if (!cJSON_IsString(name) || !cJSON_IsString(host) ||
-        !cJSON_IsNumber(port) || !cJSON_IsNumber(unitId))
+        !cJSON_IsNumber(port) || !cJSON_IsNumber(unitId) ||
+        !cJSON_IsObject(matter_structure))
     {
         cJSON_Delete(root);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing fields");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or invalid fields");
+        return ESP_FAIL;
+    }
+
+    char *ms_text = cJSON_PrintUnformatted(matter_structure);
+    if (!ms_text)
+    {
+        cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OOM");
         return ESP_FAIL;
     }
 
     device_config_t updated;
-    esp_err_t err = devices_store_update(id,
-                                         name->valuestring,
-                                         host->valuestring,
-                                         (uint16_t)port->valueint,
-                                         (uint8_t)unitId->valueint,
-                                         &updated);
+    esp_err_t err = DeviceManager::instance().update_device(id,
+                                                            name->valuestring,
+                                                            host->valuestring,
+                                                            (uint16_t)port->valueint,
+                                                            (uint8_t)unitId->valueint,
+                                                            ms_text,
+                                                            &updated);
+    free(ms_text);
     cJSON_Delete(root);
 
     if (err == ESP_ERR_NOT_FOUND)
@@ -264,10 +308,9 @@ static esp_err_t devices_put_handler(httpd_req_t *req)
     }
     if (err != ESP_OK)
     {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Persist failed");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to update device");
         return ESP_FAIL;
     }
-    ModbusManager::instance().on_device_updated(updated);
     return send_json(req, device_to_json(&updated), 200);
 }
 
@@ -297,16 +340,15 @@ static esp_err_t devices_delete_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Persist failed");
         return ESP_FAIL;
     }
-    ModbusManager::instance().on_device_removed(id);
+    //DeviceManager::instance().on_device_removed(id);
     httpd_resp_set_status(req, "204 No Content");
     return httpd_resp_send(req, nullptr, 0);
 }
 
 static esp_err_t factory_reset_handler(httpd_req_t *req)
 {
-    ModbusManager::instance().clear();
+    DeviceManager::instance().clear();
     devices_store_clear();
-    esp_matter_bridge::factory_reset();
     
     httpd_resp_set_status(req, "200 OK");
     httpd_resp_send(req, nullptr, 0);
@@ -339,8 +381,8 @@ static esp_err_t device_readings_handler(httpd_req_t *req)
     memcpy(id, after_prefix, id_len);
     id[id_len] = '\0';
 
-    ModbusManager::DeviceReadings readings;
-    if (!ModbusManager::instance().get_readings(id, readings))
+    DeviceManager::DeviceReadings readings;
+    if (!DeviceManager::instance().get_readings(id, readings))
     {
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Device not found");
         return ESP_FAIL;
@@ -366,18 +408,18 @@ static esp_err_t device_readings_handler(httpd_req_t *req)
 
     cJSON_AddItemToObject(root, "electricalPowerMeasurement", epm);
 
-    auto add_pv_section = [&](const char *key, bool v_valid, int64_t v_mv, bool i_valid, int64_t i_ma) {
-        cJSON *pv = cJSON_CreateObject();
-        if (v_valid) cJSON_AddNumberToObject(pv, "voltage", (double)v_mv);
-        else         cJSON_AddNullToObject(pv, "voltage");
-        if (i_valid) cJSON_AddNumberToObject(pv, "activeCurrent", (double)i_ma);
-        else         cJSON_AddNullToObject(pv, "activeCurrent");
-        cJSON_AddItemToObject(root, key, pv);
-    };
-    add_pv_section("pv1", readings.pv1_voltage_valid, readings.pv1_voltage_mv,
-                           readings.pv1_current_valid, readings.pv1_current_ma);
-    add_pv_section("pv2", readings.pv2_voltage_valid, readings.pv2_voltage_mv,
-                           readings.pv2_current_valid, readings.pv2_current_ma);
+    // auto add_pv_section = [&](const char *key, bool v_valid, int64_t v_mv, bool i_valid, int64_t i_ma) {
+    //     cJSON *pv = cJSON_CreateObject();
+    //     if (v_valid) cJSON_AddNumberToObject(pv, "voltage", (double)v_mv);
+    //     else         cJSON_AddNullToObject(pv, "voltage");
+    //     if (i_valid) cJSON_AddNumberToObject(pv, "activeCurrent", (double)i_ma);
+    //     else         cJSON_AddNullToObject(pv, "activeCurrent");
+    //     cJSON_AddItemToObject(root, key, pv);
+    // };
+    // add_pv_section("pv1", readings.pv1_voltage_valid, readings.pv1_voltage_mv,
+    //                        readings.pv1_current_valid, readings.pv1_current_ma);
+    // add_pv_section("pv2", readings.pv2_voltage_valid, readings.pv2_voltage_mv,
+    //                        readings.pv2_current_valid, readings.pv2_current_ma);
 
     return send_json(req, root, 200);
 }

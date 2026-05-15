@@ -15,6 +15,7 @@ public:
     void set_voltage(uint16_t raw_value);
     void set_active_current(int16_t raw_value);
     void set_active_power(int16_t raw_value);
+    void set_raw(uint32_t cluster_id, uint32_t attribute_id, uint16_t raw_value);
 
     uint16_t endpoint_id() const { return m_endpoint_id; }
 

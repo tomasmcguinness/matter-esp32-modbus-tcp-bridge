@@ -154,3 +154,12 @@ void SolarPowerDevice::set_active_power(int16_t raw_value)
         },
         static_cast<intptr_t>(m_endpoint_id));
 }
+
+void SolarPowerDevice::set_raw(uint32_t cluster_id, uint32_t attribute_id, uint16_t raw_value)
+{
+    if (cluster_id == ElectricalPowerMeasurement::Id) {
+        if      (attribute_id == Attributes::Voltage::Id)       set_voltage(raw_value);
+        else if (attribute_id == Attributes::ActiveCurrent::Id) set_active_current((int16_t)raw_value);
+        else if (attribute_id == Attributes::ActivePower::Id)   set_active_power((int16_t)raw_value);
+    }
+}

@@ -2,7 +2,7 @@
 #include <nvs_flash.h>
 #include "esp_log.h"
 #include "esp_netif.h"
-#include "modbus_manager.h"
+#include "device_manager.h"
 #include "mdns.h"
 #include "web_server.h"
 #include "devices_store.h"
@@ -107,7 +107,7 @@ static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
         mdns_registered = true;
         ESP_LOGI(TAG, "mDNS: %s.local -> " IPSTR " with _http._tcp:%d", MDNS_DELEGATED_HOSTNAME, IP2STR(&ip_info.ip), MDNS_HTTP_PORT);
 
-        ModbusManager::instance().start_polling();
+        DeviceManager::instance().start_polling();
         break;
     }
     default:
@@ -153,8 +153,8 @@ extern "C" void app_main()
     }
 
     devices_store_init();
-    
-    ModbusManager::instance().init(node, agg_ep);
+
+    DeviceManager::instance().init(node, agg_ep);
 
     web_server_start([]() {
         chip::Server::GetInstance().ScheduleFactoryReset();

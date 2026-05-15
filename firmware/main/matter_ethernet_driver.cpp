@@ -19,7 +19,7 @@
 #define ETH_SPI_RST_GPIO 9
 #define ETH_SPI_CLOCK_MHZ 25
 
-static const char *TAG = "matter_eth_w5500";
+static const char *TAG = "matter_ethernet_driver";
 
 namespace chip
 {
