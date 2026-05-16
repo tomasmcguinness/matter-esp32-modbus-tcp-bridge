@@ -15,9 +15,12 @@ ModbusManager &ModbusManager::instance()
     return s_instance;
 }
 
-void ModbusManager::create_device(const device_config_t &config, const std::vector<RegisterSpec> &regs)
+void ModbusManager::create_device(const device_config_t &config, const std::vector<RegisterSpec> &regs,
+                                   ModbusDevice::readings_cb_t cb)
 {
-    m_devices.push_back(new ModbusDevice(config, regs));
+    auto *dev = new ModbusDevice(config, regs);
+    if (cb) dev->set_readings_callback(cb, const_cast<char *>(dev->id()));
+    m_devices.push_back(dev);
     ESP_LOGI(TAG, "Created Modbus device '%s' (%s:%u)", config.id, config.host, config.port);
 }
 
@@ -45,9 +48,10 @@ void ModbusManager::start_polling()
     ESP_LOGI(TAG, "Polling started for %zu device(s)", m_devices.size());
 }
 
-void ModbusManager::on_device_added(const device_config_t &config, const std::vector<RegisterSpec> &regs)
+void ModbusManager::on_device_added(const device_config_t &config, const std::vector<RegisterSpec> &regs,
+                                     ModbusDevice::readings_cb_t cb)
 {
-    create_device(config, regs);
+    create_device(config, regs, cb);
     ESP_LOGI(TAG, "Device added: %s", config.id);
 }
 

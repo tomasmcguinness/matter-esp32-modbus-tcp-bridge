@@ -53,7 +53,7 @@ esp_err_t DeviceManager::init(esp_matter::node_t *node, esp_matter::endpoint_t *
     for (size_t i = 0; i < count; i++) {
         const device_config_t *cfg = devices_store_at(i);
         auto regs = build_register_specs(cfg->matter_structure_json);
-        ModbusManager::instance().on_device_added(*cfg, regs);
+        ModbusManager::instance().on_device_added(*cfg, regs, readings_dispatch_cb);
     }
     return MatterManager::instance().init(node, aggregator);
 }
@@ -76,10 +76,9 @@ esp_err_t DeviceManager::register_device(const device_config_t &config)
     }
 
     ESP_LOGI(TAG, "Adding device to ModbusManager");
-    ModbusManager::instance().on_device_added(config, regs);
-    
+    ModbusManager::instance().on_device_added(config, regs, readings_dispatch_cb);
+
     ModbusDevice *modbus = ModbusManager::instance().find(config.id);
-    modbus->set_readings_callback(readings_dispatch_cb, const_cast<char *>(modbus->id()));
 
     ESP_LOGI(TAG, "Adding device to MatterManager");
     esp_err_t err = MatterManager::instance().on_device_added(config, modbus);
@@ -153,13 +152,5 @@ uint16_t DeviceManager::endpoint_id(const char *id) const
 
 bool DeviceManager::get_readings(const char *id, DeviceReadings &out) const
 {
-    MatterManager::DeviceReadings r;
-    if (!MatterManager::instance().get_readings(id, r)) return false;
-    out.voltage_valid = r.voltage_valid;
-    out.voltage_mv    = r.voltage_mv;
-    out.current_valid = r.current_valid;
-    out.current_ma    = r.current_ma;
-    out.power_valid   = r.power_valid;
-    out.power_mw      = r.power_mw;
-    return true;
+    return MatterManager::instance().get_readings(id, out);
 }

@@ -12,6 +12,7 @@
 
 #include "devices_store.h"
 #include "device_manager.h"
+#include "device_readings.h"
 
 #include <setup_payload/OnboardingCodesUtil.h>
 #include <app/server/Server.h>
@@ -381,45 +382,25 @@ static esp_err_t device_readings_handler(httpd_req_t *req)
     memcpy(id, after_prefix, id_len);
     id[id_len] = '\0';
 
-    DeviceManager::DeviceReadings readings;
+    DeviceReadings readings;
     if (!DeviceManager::instance().get_readings(id, readings))
     {
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Device not found");
         return ESP_FAIL;
     }
 
+    cJSON *arr = cJSON_CreateArray();
+    for (const auto &r : readings) {
+        cJSON *entry = cJSON_CreateObject();
+        cJSON_AddNumberToObject(entry, "endpointId",  r.endpoint_id);
+        cJSON_AddNumberToObject(entry, "clusterId",   r.cluster_id);
+        cJSON_AddNumberToObject(entry, "attributeId", r.attribute_id);
+        cJSON_AddNumberToObject(entry, "value",       (double)r.value);
+        cJSON_AddItemToArray(arr, entry);
+    }
+
     cJSON *root = cJSON_CreateObject();
-    cJSON *epm  = cJSON_CreateObject();
-
-    if (readings.voltage_valid)
-        cJSON_AddNumberToObject(epm, "voltage", (double)readings.voltage_mv);
-    else
-        cJSON_AddNullToObject(epm, "voltage");
-
-    if (readings.current_valid)
-        cJSON_AddNumberToObject(epm, "activeCurrent", (double)readings.current_ma);
-    else
-        cJSON_AddNullToObject(epm, "activeCurrent");
-
-    if (readings.power_valid)
-        cJSON_AddNumberToObject(epm, "activePower", (double)readings.power_mw);
-    else
-        cJSON_AddNullToObject(epm, "activePower");
-
-    cJSON_AddItemToObject(root, "electricalPowerMeasurement", epm);
-
-    // auto add_pv_section = [&](const char *key, bool v_valid, int64_t v_mv, bool i_valid, int64_t i_ma) {
-    //     cJSON *pv = cJSON_CreateObject();
-    //     if (v_valid) cJSON_AddNumberToObject(pv, "voltage", (double)v_mv);
-    //     else         cJSON_AddNullToObject(pv, "voltage");
-    //     if (i_valid) cJSON_AddNumberToObject(pv, "activeCurrent", (double)i_ma);
-    //     else         cJSON_AddNullToObject(pv, "activeCurrent");
-    //     cJSON_AddItemToObject(root, key, pv);
-    // };
-    // add_pv_section("pv1", readings.pv1_voltage_valid, readings.pv1_voltage_mv,
-    //                        readings.pv1_current_valid, readings.pv1_current_ma);
-    // add_pv_section("pv2", readings.pv2_voltage_valid, readings.pv2_voltage_mv,
-    //                        readings.pv2_current_valid, readings.pv2_current_ma);
+    cJSON_AddItemToObject(root, "readings", arr);
 
     return send_json(req, root, 200);
 }

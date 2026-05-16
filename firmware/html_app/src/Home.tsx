@@ -1,65 +1,112 @@
 import { useEffect, useState } from 'react'
 
+const CLUSTER_NAMES: Record<number, string> = {
+  0x0091: 'Electrical Power Measurement',
+}
+
+const ATTRIBUTE_META: Record<number, Record<number, { label: string; format: (v: number) => string }>> = {
+  0x0091: {
+    0x0008: { label: 'Voltage',        format: (v) => `${(v / 1000).toFixed(1)} V`  },
+    0x0005: { label: 'Active Current',  format: (v) => `${(v / 1000).toFixed(2)} A` },
+    0x0002: { label: 'Active Power',    format: (v) => `${(v / 1000).toFixed(0)} W`  },
+  },
+}
+
+const DEVICE_TYPE_NAMES: Record<number, string> = {
+  0x010e: 'Solar Power',
+  0x0510: 'Electrical Sensor',
+}
+
+type Mapping = {
+  function: number
+  address: number
+  cluster: number
+  attribute: number
+}
+
+type MatterEndpoint = {
+  endpointId?: number
+  deviceTypes: number[]
+  mappings: Mapping[]
+}
+
 type Device = {
   id: string
   name: string
+  matter_structure?: { endpoints: MatterEndpoint[] }
+}
+
+type EndpointReading = {
   endpointId: number
+  clusterId: number
+  attributeId: number
+  value: number
 }
 
-type EpmReadings = {
-  voltage: number | null
-  activeCurrent: number | null
-  activePower: number | null
+function AttributeCard({
+  label,
+  value,
+  format,
+}: {
+  label: string
+  value: number | null
+  format: (v: number) => string
+}) {
+  return (
+    <div className="col-6 col-md-3">
+      <div className="card text-center h-100">
+        <div className="card-body py-2">
+          <div className="text-muted small">{label}</div>
+          <div className="fs-5 fw-semibold">{value != null ? format(value) : '—'}</div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
-type PvReadings = {
-  voltage: number | null
-  activeCurrent: number | null
-}
+function EndpointCard({
+  endpoint,
+  readings,
+}: {
+  endpoint: MatterEndpoint
+  readings: EndpointReading[]
+}) {
+  const epReadings = readings.filter((r) => r.endpointId === endpoint.endpointId)
 
-type Readings = {
-  electricalPowerMeasurement: EpmReadings
-  pv1: PvReadings
-  pv2: PvReadings
-}
+  const clusterIds = [...new Set(endpoint.mappings.map((m) => m.cluster))]
+  const clusterLabel =
+    clusterIds.length === 1
+      ? (CLUSTER_NAMES[clusterIds[0]] ?? `Cluster 0x${clusterIds[0].toString(16).padStart(4, '0')}`)
+      : 'Multiple Clusters'
 
-function fmtVoltage(mv: number | null): string {
-  if (mv === null) return '—'
-  return `${(mv / 1000).toFixed(1)} V`
-}
+  const deviceTypeLabel = endpoint.deviceTypes
+    .map((dt) => DEVICE_TYPE_NAMES[dt] ?? `0x${dt.toString(16).padStart(4, '0')}`)
+    .join(' · ')
 
-function fmtCurrent(ma: number | null): string {
-  if (ma === null) return '—'
-  return `${(ma / 1000).toFixed(2)} A`
-}
-
-function fmtPower(mw: number | null): string {
-  if (mw === null) return '—'
-  return `${(mw / 1000).toFixed(0)} W`
-}
-
-function PvSensorCard({ label, readings }: { label: string; readings: PvReadings | null }) {
   return (
     <div className="card mt-2">
-      <div className="card-header small text-muted">{label}</div>
+      <div className="card-header small d-flex justify-content-between align-items-center">
+        <span className="text-muted">{clusterLabel}</span>
+        <div>
+          {deviceTypeLabel && <span className="text-muted me-2">{deviceTypeLabel}</span>}
+          {endpoint.endpointId != null && (
+            <span className="badge bg-secondary">Endpoint {endpoint.endpointId}</span>
+          )}
+        </div>
+      </div>
       <div className="card-body">
         <div className="row g-2">
-          <div className="col-6">
-            <div className="card text-center h-100">
-              <div className="card-body py-2">
-                <div className="text-muted small">Voltage</div>
-                <div className="fs-5 fw-semibold">{fmtVoltage(readings?.voltage ?? null)}</div>
-              </div>
-            </div>
-          </div>
-          <div className="col-6">
-            <div className="card text-center h-100">
-              <div className="card-body py-2">
-                <div className="text-muted small">Current</div>
-                <div className="fs-5 fw-semibold">{fmtCurrent(readings?.activeCurrent ?? null)}</div>
-              </div>
-            </div>
-          </div>
+          {endpoint.mappings.map((m, i) => {
+            const meta = ATTRIBUTE_META[m.cluster]?.[m.attribute]
+            const label = meta?.label ?? `Attr 0x${m.attribute.toString(16).padStart(4, '0')}`
+            const format = meta?.format ?? ((v: number) => String(v))
+            const reading = epReadings.find(
+              (r) => r.clusterId === m.cluster && r.attributeId === m.attribute,
+            )
+            return (
+              <AttributeCard key={i} label={label} value={reading?.value ?? null} format={format} />
+            )
+          })}
         </div>
       </div>
     </div>
@@ -67,65 +114,36 @@ function PvSensorCard({ label, readings }: { label: string; readings: PvReadings
 }
 
 function DeviceCard({ device }: { device: Device }) {
-  const [readings, setReadings] = useState<Readings | null>(null)
+  const [readings, setReadings] = useState<EndpointReading[]>([])
 
   useEffect(() => {
-    const fetch_readings = () => {
+    const fetchReadings = () => {
       fetch(`/api/devices/${device.id}/readings`)
-        .then((res) => (res.ok ? (res.json() as Promise<Readings>) : Promise.reject()))
-        .then(setReadings)
+        .then((res) => (res.ok ? (res.json() as Promise<{ readings: EndpointReading[] }>) : Promise.reject()))
+        .then((data) => setReadings(data.readings))
         .catch(() => {})
     }
 
-    fetch_readings()
-    const interval = setInterval(fetch_readings, 5000)
+    fetchReadings()
+    const interval = setInterval(fetchReadings, 5000)
     return () => clearInterval(interval)
   }, [device.id])
 
-  const epm = readings?.electricalPowerMeasurement ?? null
+  const endpoints = device.matter_structure?.endpoints ?? []
 
   return (
     <div className="card mb-3">
-      <div className="card-header d-flex justify-content-between align-items-center">
+      <div className="card-header">
         <strong>{device.name}</strong>
-        {device.endpointId > 0 && (
-          <span className="badge bg-secondary">Endpoint {device.endpointId}</span>
-        )}
       </div>
       <div className="card-body">
-        <div className="card">
-          <div className="card-header small text-muted">Electrical Power Measurement</div>
-          <div className="card-body">
-            <div className="row g-2">
-              <div className="col-6 col-md-3">
-                <div className="card text-center h-100">
-                  <div className="card-body py-2">
-                    <div className="text-muted small">Voltage</div>
-                    <div className="fs-5 fw-semibold">{fmtVoltage(epm?.voltage ?? null)}</div>
-                  </div>
-                </div>
-              </div>
-              <div className="col-6 col-md-3">
-                <div className="card text-center h-100">
-                  <div className="card-body py-2">
-                    <div className="text-muted small">Active Current</div>
-                    <div className="fs-5 fw-semibold">{fmtCurrent(epm?.activeCurrent ?? null)}</div>
-                  </div>
-                </div>
-              </div>
-              <div className="col-6 col-md-3">
-                <div className="card text-center h-100">
-                  <div className="card-body py-2">
-                    <div className="text-muted small">Active Power</div>
-                    <div className="fs-5 fw-semibold">{fmtPower(epm?.activePower ?? null)}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <PvSensorCard label="PV String 1" readings={readings?.pv1 ?? null} />
-        <PvSensorCard label="PV String 2" readings={readings?.pv2 ?? null} />
+        {endpoints.length === 0 ? (
+          <p className="text-muted mb-0">No endpoints configured.</p>
+        ) : (
+          endpoints.map((ep, i) => (
+            <EndpointCard key={i} endpoint={ep} readings={readings} />
+          ))
+        )}
       </div>
     </div>
   )
@@ -143,7 +161,7 @@ function Home() {
         return res.json() as Promise<Device[]>
       })
       .then(setDevices)
-      .catch((e) => setError(e.message))
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
 

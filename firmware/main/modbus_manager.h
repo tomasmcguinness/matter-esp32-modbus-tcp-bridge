@@ -14,7 +14,8 @@ public:
     void pause_all();
     void resume_all();
 
-    void on_device_added(const device_config_t &config, const std::vector<RegisterSpec> &regs);
+    void on_device_added(const device_config_t &config, const std::vector<RegisterSpec> &regs,
+                         ModbusDevice::readings_cb_t cb = nullptr);
     void on_device_removed(const char *id);
     void clear();
 
@@ -23,7 +24,8 @@ public:
 private:
     ModbusManager() = default;
 
-    void create_device(const device_config_t &config, const std::vector<RegisterSpec> &regs);
+    void create_device(const device_config_t &config, const std::vector<RegisterSpec> &regs,
+                       ModbusDevice::readings_cb_t cb);
 
     std::vector<ModbusDevice *> m_devices;
 };

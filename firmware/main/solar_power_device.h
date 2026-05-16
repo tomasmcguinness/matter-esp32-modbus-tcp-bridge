@@ -7,7 +7,8 @@
 
 #include <app/clusters/electrical-power-measurement-server/electrical-power-measurement-server.h>
 
-class SolarPowerDevice : public chip::app::Clusters::ElectricalPowerMeasurement::Delegate {
+class SolarPowerDevice : public chip::app::Clusters::ElectricalPowerMeasurement::Delegate
+{
 public:
     SolarPowerDevice(esp_matter_bridge::device_t *dev, const device_config_t &config);
     ~SolarPowerDevice();
@@ -16,53 +17,64 @@ public:
     void set_active_current(int16_t raw_value);
     void set_active_power(int16_t raw_value);
     void set_raw(uint32_t cluster_id, uint32_t attribute_id, uint16_t raw_value);
+    bool get_raw(uint32_t cluster_id, uint32_t attribute_id, int64_t &out) const;
 
     uint16_t endpoint_id() const { return m_endpoint_id; }
 
-    bool get_voltage_mv(int64_t &out) const {
-        if (m_voltage.IsNull()) return false;
+    bool get_voltage_mv(int64_t &out) const
+    {
+        if (m_voltage.IsNull())
+            return false;
         out = m_voltage.Value();
         return true;
     }
-    bool get_active_current_ma(int64_t &out) const {
-        if (m_active_current.IsNull()) return false;
+    bool get_active_current_ma(int64_t &out) const
+    {
+        if (m_active_current.IsNull())
+            return false;
         out = m_active_current.Value();
         return true;
     }
-    bool get_active_power_mw(int64_t &out) const {
-        if (m_active_power.IsNull()) return false;
+    bool get_active_power_mw(int64_t &out) const
+    {
+        if (m_active_power.IsNull())
+            return false;
         out = m_active_power.Value();
         return true;
     }
 
     // Delegate overrides
-    chip::app::Clusters::ElectricalPowerMeasurement::PowerModeEnum GetPowerMode() override {
+    chip::app::Clusters::ElectricalPowerMeasurement::PowerModeEnum GetPowerMode() override
+    {
         return chip::app::Clusters::ElectricalPowerMeasurement::PowerModeEnum::kAc;
     }
     uint8_t GetNumberOfMeasurementTypes() override { return 3; }
 
     CHIP_ERROR StartAccuracyRead() override { return CHIP_NO_ERROR; }
     CHIP_ERROR GetAccuracyByIndex(uint8_t index,
-        chip::app::Clusters::ElectricalPowerMeasurement::Structs::MeasurementAccuracyStruct::Type &accuracy) override;
+                                  chip::app::Clusters::ElectricalPowerMeasurement::Structs::MeasurementAccuracyStruct::Type &accuracy) override;
     CHIP_ERROR EndAccuracyRead() override { return CHIP_NO_ERROR; }
 
     CHIP_ERROR StartRangesRead() override { return CHIP_NO_ERROR; }
     CHIP_ERROR GetRangeByIndex(uint8_t,
-        chip::app::Clusters::ElectricalPowerMeasurement::Structs::MeasurementRangeStruct::Type &) override {
+                               chip::app::Clusters::ElectricalPowerMeasurement::Structs::MeasurementRangeStruct::Type &) override
+    {
         return CHIP_ERROR_PROVIDER_LIST_EXHAUSTED;
     }
     CHIP_ERROR EndRangesRead() override { return CHIP_NO_ERROR; }
 
     CHIP_ERROR StartHarmonicCurrentsRead() override { return CHIP_NO_ERROR; }
     CHIP_ERROR GetHarmonicCurrentsByIndex(uint8_t,
-        chip::app::Clusters::ElectricalPowerMeasurement::Structs::HarmonicMeasurementStruct::Type &) override {
+                                          chip::app::Clusters::ElectricalPowerMeasurement::Structs::HarmonicMeasurementStruct::Type &) override
+    {
         return CHIP_ERROR_PROVIDER_LIST_EXHAUSTED;
     }
     CHIP_ERROR EndHarmonicCurrentsRead() override { return CHIP_NO_ERROR; }
 
     CHIP_ERROR StartHarmonicPhasesRead() override { return CHIP_NO_ERROR; }
     CHIP_ERROR GetHarmonicPhasesByIndex(uint8_t,
-        chip::app::Clusters::ElectricalPowerMeasurement::Structs::HarmonicMeasurementStruct::Type &) override {
+                                        chip::app::Clusters::ElectricalPowerMeasurement::Structs::HarmonicMeasurementStruct::Type &) override
+    {
         return CHIP_ERROR_PROVIDER_LIST_EXHAUSTED;
     }
     CHIP_ERROR EndHarmonicPhasesRead() override { return CHIP_NO_ERROR; }

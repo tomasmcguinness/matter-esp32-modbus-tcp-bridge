@@ -3,6 +3,7 @@
 #include "esp_err.h"
 #include "esp_matter.h"
 #include "devices_store.h"
+#include "device_readings.h"
 
 class DeviceManager {
 public:
@@ -27,14 +28,6 @@ public:
 
     uint16_t endpoint_id(const char *id) const;
 
-    struct DeviceReadings {
-        bool    voltage_valid;
-        int64_t voltage_mv;
-        bool    current_valid;
-        int64_t current_ma;
-        bool    power_valid;
-        int64_t power_mw;
-    };
     bool get_readings(const char *id, DeviceReadings &out) const;
 
 private:

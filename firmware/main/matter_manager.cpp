@@ -98,6 +98,8 @@ static esp_err_t write_endpoint_id_to_matter_structure(const char *json_in,
 
 void MatterManager::on_readings(const char *id, const std::vector<RegisterReading> &readings)
 {
+    ESP_LOGI(TAG, "ModBus readings received for device '%s'", id);
+
     auto it = std::find_if(m_devices.begin(), m_devices.end(),
         [id](const DevicePair &p) { return strcmp(p.id, id) == 0; });
     if (it == m_devices.end()) return;
@@ -126,8 +128,7 @@ esp_err_t MatterManager::device_type_callback(esp_matter::endpoint_t *ep,
         if (cfg) {
             cluster_t *bdbi = cluster::get(ep, chip::app::Clusters::BridgedDeviceBasicInformation::Id);
             if (bdbi) {
-                bridged_device_basic_information::attribute::create_node_label(
-                    bdbi, (char *)cfg->name, strlen(cfg->name));
+                bridged_device_basic_information::attribute::create_node_label(bdbi, (char *)cfg->name, strlen(cfg->name));
             }
         }
         return ESP_OK;
@@ -200,6 +201,7 @@ esp_err_t MatterManager::create_matter_device(const device_config_t &config, Mod
         }
     }
 
+    // If we don't have this Matter devices in the Bridge already, create it.
     if (!bridge_dev) {
         bridge_dev = esp_matter_bridge::create_device(m_node,
                                                       m_aggregator_endpoint_id,
@@ -239,8 +241,7 @@ esp_err_t MatterManager::create_matter_device(const device_config_t &config, Mod
     pair.mappings   = mappings;
     m_devices.push_back(pair);
 
-    ESP_LOGI(TAG, "Registered '%s' -> ep=%u", config.name,
-             endpoint::get_id(bridge_dev->endpoint));
+    ESP_LOGI(TAG, "Registered '%s' -> ep=%u", config.name, endpoint::get_id(bridge_dev->endpoint));
     return ESP_OK;
 }
 
@@ -291,8 +292,13 @@ bool MatterManager::get_readings(const char *id, DeviceReadings &out) const
     auto it = std::find_if(m_devices.begin(), m_devices.end(),
         [id](const DevicePair &p) { return strcmp(p.id, id) == 0; });
     if (it == m_devices.end()) return false;
-    out.voltage_valid = it->matter->get_voltage_mv(out.voltage_mv);
-    out.current_valid = it->matter->get_active_current_ma(out.current_ma);
-    out.power_valid   = it->matter->get_active_power_mw(out.power_mw);
+
+    uint16_t ep_id = it->matter->endpoint_id();
+    for (const auto &m : it->mappings) {
+        int64_t value = 0;
+        if (it->matter->get_raw(m.cluster_id, m.attribute_id, value)) {
+            out.push_back({ep_id, m.cluster_id, m.attribute_id, value});
+        }
+    }
     return true;
 }
