@@ -12,6 +12,19 @@ static void readings_dispatch_cb(const std::vector<RegisterReading> &readings, v
     MatterManager::instance().on_readings(static_cast<const char *>(arg), readings);
 }
 
+static void collect_regs_from_endpoint(cJSON *ep, std::vector<RegisterSpec> &regs)
+{
+    cJSON *mappings = cJSON_GetObjectItemCaseSensitive(ep, "mappings");
+    if (!cJSON_IsArray(mappings)) return;
+    cJSON *m = nullptr;
+    cJSON_ArrayForEach(m, mappings) {
+        cJSON *func = cJSON_GetObjectItemCaseSensitive(m, "function");
+        cJSON *addr = cJSON_GetObjectItemCaseSensitive(m, "address");
+        if (!cJSON_IsNumber(func) || !cJSON_IsNumber(addr)) continue;
+        regs.push_back({(uint16_t)addr->valueint, func->valueint == 4});
+    }
+}
+
 static std::vector<RegisterSpec> build_register_specs(const char *matter_structure_json)
 {
     std::vector<RegisterSpec> regs;
@@ -24,18 +37,28 @@ static std::vector<RegisterSpec> build_register_specs(const char *matter_structu
     if (cJSON_IsArray(endpoints)) {
         cJSON *ep = nullptr;
         cJSON_ArrayForEach(ep, endpoints) {
-            cJSON *mappings = cJSON_GetObjectItemCaseSensitive(ep, "mappings");
-            if (!cJSON_IsArray(mappings)) continue;
-            cJSON *m = nullptr;
-            cJSON_ArrayForEach(m, mappings) {
-                cJSON *func = cJSON_GetObjectItemCaseSensitive(m, "function");
-                cJSON *addr = cJSON_GetObjectItemCaseSensitive(m, "address");
-                if (!cJSON_IsNumber(func) || !cJSON_IsNumber(addr)) continue;
-                regs.push_back({(uint16_t)addr->valueint, func->valueint == 4});
+            collect_regs_from_endpoint(ep, regs);
+
+            cJSON *parts = cJSON_GetObjectItemCaseSensitive(ep, "parts");
+            if (cJSON_IsArray(parts)) {
+                cJSON *part = nullptr;
+                cJSON_ArrayForEach(part, parts) {
+                    collect_regs_from_endpoint(part, regs);
+                }
             }
         }
     }
     cJSON_Delete(root);
+
+    // Remove duplicates — same address + function code may appear across root and parts.
+    regs.erase(std::remove_if(regs.begin(), regs.end(), [&](const RegisterSpec &a) {
+        for (const auto &b : regs) {
+            if (&b == &a) break;
+            if (b.address == a.address && b.input == a.input) return true;
+        }
+        return false;
+    }), regs.end());
+
     return regs;
 }
 

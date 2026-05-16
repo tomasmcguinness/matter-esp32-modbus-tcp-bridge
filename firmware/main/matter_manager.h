@@ -25,17 +25,22 @@ public:
 
     void on_readings(const char *id, const std::vector<RegisterReading> &readings);
 
-private:
+    // endpoint_idx 0 = root, 1..N = parts in order
     struct AttributeMapping {
         uint16_t reg_address;
         uint32_t cluster_id;
         uint32_t attribute_id;
+        size_t   endpoint_idx;
+    };
+
+    struct EndpointEntry {
+        SolarPowerDevice            *matter     = nullptr;
+        esp_matter_bridge::device_t *bridge_dev = nullptr;
     };
 
     struct DevicePair {
         char                          id[DEVICE_ID_LEN];
-        SolarPowerDevice             *matter;
-        esp_matter_bridge::device_t  *bridge_dev;
+        std::vector<EndpointEntry>    endpoints; // [0] = root, [1..] = parts
         std::vector<AttributeMapping> mappings;
     };
 
@@ -47,7 +52,11 @@ private:
 
     esp_err_t create_matter_device(const device_config_t &config, ModbusDevice *modbus);
 
-    std::vector<AttributeMapping> parse_mappings(const char *matter_structure_json);
+    EndpointEntry create_or_resume_endpoint(uint32_t device_type_id, uint16_t parent_ep_id,
+                                             uint16_t stored_ep_id, const device_config_t &config,
+                                             bool &newly_created_out, uint16_t &new_ep_id_out);
+
+    std::vector<AttributeMapping> parse_all_mappings(const char *matter_structure_json);
 
     esp_matter::node_t     *m_node                   = nullptr;
     uint16_t                m_aggregator_endpoint_id = chip::kInvalidEndpointId;

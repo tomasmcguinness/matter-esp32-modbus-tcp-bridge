@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router'
 const HARDCODED_MATTER_STRUCTURE = {
   endpoints: [
     {
+      description: "The Inverter itself",
       deviceTypes: [0x0017], //, 0x0510],
       mappings: [
         // This probably needs a *type* field, to help with uint vs int etc.
@@ -14,8 +15,23 @@ const HARDCODED_MATTER_STRUCTURE = {
       // This "parts" section isn't processed yet, but it allows us to define multiple logical devices within one physical device. 
       // For a solar power device, this would have multiple electrical sensors to represent PV strings
       // or a battery.
-      "parts": [
-        { "deviceTypes": [0x0510], "mappings": [] }
+      parts: [
+        {
+          description: "Power Measurement for PV1",
+          deviceTypes: [0x0510], mappings: [
+            { function: 4, address: 0x0000, cluster: 0x0090, attribute: 0x0004 }, // Voltage
+            { function: 4, address: 0x0001, cluster: 0x0090, attribute: 0x0005 }, // ActiveCurrent
+            { function: 4, address: 0x0002, cluster: 0x0090, attribute: 0x0008 }, // ActivePower
+          ]
+        },
+        {
+          description: "Power Measurement for PV2",
+          deviceTypes: [0x0510], mappings: [
+            { function: 4, address: 0x0000, cluster: 0x0090, attribute: 0x0004 }, // Voltage
+            { function: 4, address: 0x0001, cluster: 0x0090, attribute: 0x0005 }, // ActiveCurrent
+            { function: 4, address: 0x0002, cluster: 0x0090, attribute: 0x0008 }, // ActivePower
+          ]
+        }
       ]
     },
   ],

@@ -7,10 +7,19 @@ type Mapping = {
   attribute: number
 }
 
-type MatterEndpoint = {
+type Part = {
   endpointId?: number
+  description?: string
   deviceTypes: number[]
   mappings: Mapping[]
+}
+
+type MatterEndpoint = {
+  endpointId?: number
+  description?: string
+  deviceTypes: number[]
+  mappings: Mapping[]
+  parts?: Part[]
 }
 
 export type Device = {
@@ -22,19 +31,20 @@ export type Device = {
   matter_structure: { endpoints: MatterEndpoint[] }
 }
 
-// const MOCK_MATTER_STRUCTURE = {
-//   endpoints: [
-//     {
-//       endpointId: 4,
-//       deviceTypes: [0x010e, 0x0510],
-//       mappings: [
-//         { function: 4, address: 0x0000, cluster: 0x0091, attribute: 0x0008 },
-//         { function: 4, address: 0x0001, cluster: 0x0091, attribute: 0x0005 },
-//         { function: 4, address: 0x0002, cluster: 0x0091, attribute: 0x0002 },
-//       ],
-//     },
-//   ],
-// }
+// Simulate the server assigning endpoint IDs to the matter structure on device creation.
+let nextEndpointId = 4
+function assignEndpointIds(structure: { endpoints: MatterEndpoint[] }): { endpoints: MatterEndpoint[] } {
+  return {
+    endpoints: structure.endpoints.map((ep) => ({
+      ...ep,
+      endpointId: nextEndpointId++,
+      parts: ep.parts?.map((part) => ({
+        ...part,
+        endpointId: nextEndpointId++,
+      })),
+    })),
+  }
+}
 
 const devices: Device[] = []
 
@@ -46,22 +56,31 @@ export const handlers = [
   http.get('/api/devices/:id/readings', ({ params }) => {
     const device = devices.find((d) => d.id === params.id)
     if (!device) return new HttpResponse(null, { status: 404 })
-    const ep = device.matter_structure.endpoints[0]
-    return HttpResponse.json({
-      readings: [
-        { endpointId: ep?.endpointId ?? 0, clusterId: 0x0091, attributeId: 0x0008, value: 243800 },
-        { endpointId: ep?.endpointId ?? 0, clusterId: 0x0091, attributeId: 0x0005, value: 9500 },
-        { endpointId: ep?.endpointId ?? 0, clusterId: 0x0091, attributeId: 0x0002, value: 2300000 },
-      ],
-    })
+
+    const readings: { endpointId: number; clusterId: number; attributeId: number; value: number }[] = []
+
+    for (const ep of device.matter_structure.endpoints) {
+      if (ep.endpointId == null) continue
+      for (const m of ep.mappings) {
+        readings.push({ endpointId: ep.endpointId, clusterId: m.cluster, attributeId: m.attribute, value: mockValue(m.attribute) })
+      }
+      for (const part of ep.parts ?? []) {
+        if (part.endpointId == null) continue
+        for (const m of part.mappings) {
+          readings.push({ endpointId: part.endpointId, clusterId: m.cluster, attributeId: m.attribute, value: mockValue(m.attribute) })
+        }
+      }
+    }
+
+    return HttpResponse.json({ readings })
   }),
 
   http.post('/api/devices', async ({ request }) => {
     const body = (await request.json()) as Omit<Device, 'id'>
     const device: Device = {
       id: crypto.randomUUID(),
-      //matter_structure: MOCK_MATTER_STRUCTURE,
       ...body,
+      matter_structure: assignEndpointIds(body.matter_structure),
     }
     devices.push(device)
     return HttpResponse.json(device, { status: 201 })
@@ -100,6 +119,14 @@ export const handlers = [
 
   http.post('/api/factory-reset', () => {
     devices.splice(0, devices.length)
+    nextEndpointId = 4
     return new HttpResponse(null, { status: 200 })
   }),
 ]
+
+function mockValue(attributeId: number): number {
+  if (attributeId === 0x0008) return 243800   // ~243.8 V
+  if (attributeId === 0x0005) return 9500     // ~9.5 A
+  if (attributeId === 0x0002) return 2300000  // ~2300 W
+  return 0
+}

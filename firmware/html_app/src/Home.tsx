@@ -13,7 +13,7 @@ const ATTRIBUTE_META: Record<number, Record<number, { label: string; format: (v:
 }
 
 const DEVICE_TYPE_NAMES: Record<number, string> = {
-  0x010e: 'Solar Power',
+  0x0017: 'Solar Power',
   0x0510: 'Electrical Sensor',
 }
 
@@ -24,10 +24,19 @@ type Mapping = {
   attribute: number
 }
 
-type MatterEndpoint = {
+type Part = {
   endpointId?: number
+  description?: string
   deviceTypes: number[]
   mappings: Mapping[]
+}
+
+type MatterEndpoint = {
+  endpointId?: number
+  description?: string
+  deviceTypes: number[]
+  mappings: Mapping[]
+  parts?: Part[]
 }
 
 type Device = {
@@ -64,6 +73,70 @@ function AttributeCard({
   )
 }
 
+function AttributeRow({
+  mappings,
+  epReadings,
+}: {
+  mappings: Mapping[]
+  epReadings: EndpointReading[]
+}) {
+  if (mappings.length === 0) return null
+  return (
+    <div className="row g-2">
+      {mappings.map((m, i) => {
+        const meta   = ATTRIBUTE_META[m.cluster]?.[m.attribute]
+        const label  = meta?.label ?? `Attr 0x${m.attribute.toString(16).padStart(4, '0')}`
+        const format = meta?.format ?? ((v: number) => String(v))
+        const reading = epReadings.find(
+          (r) => r.clusterId === m.cluster && r.attributeId === m.attribute,
+        )
+        return (
+          <AttributeCard key={i} label={label} value={reading?.value ?? null} format={format} />
+        )
+      })}
+    </div>
+  )
+}
+
+function PartCard({
+  part,
+  readings,
+}: {
+  part: Part
+  readings: EndpointReading[]
+}) {
+  const epReadings = readings.filter((r) => r.endpointId === part.endpointId)
+
+  const deviceTypeLabel = part.deviceTypes
+    .map((dt) => DEVICE_TYPE_NAMES[dt] ?? `0x${dt.toString(16).padStart(4, '0')}`)
+    .join(' · ')
+
+  const clusterIds = [...new Set(part.mappings.map((m) => m.cluster))]
+  const clusterLabel =
+    clusterIds.length === 1
+      ? (CLUSTER_NAMES[clusterIds[0]] ?? `Cluster 0x${clusterIds[0].toString(16).padStart(4, '0')}`)
+      : 'Multiple Clusters'
+
+  const headerLeft = part.description ?? clusterLabel
+
+  return (
+    <div className="card mt-2 ms-3">
+      <div className="card-header small d-flex justify-content-between align-items-center">
+        <span className="text-muted">{headerLeft}</span>
+        <div>
+          {deviceTypeLabel && <span className="text-muted me-2">{deviceTypeLabel}</span>}
+          {part.endpointId != null && (
+            <span className="badge bg-secondary">Endpoint {part.endpointId}</span>
+          )}
+        </div>
+      </div>
+      <div className="card-body">
+        <AttributeRow mappings={part.mappings} epReadings={epReadings} />
+      </div>
+    </div>
+  )
+}
+
 function EndpointCard({
   endpoint,
   readings,
@@ -83,10 +156,12 @@ function EndpointCard({
     .map((dt) => DEVICE_TYPE_NAMES[dt] ?? `0x${dt.toString(16).padStart(4, '0')}`)
     .join(' · ')
 
+  const headerLeft = endpoint.description ?? clusterLabel
+
   return (
     <div className="card mt-2">
       <div className="card-header small d-flex justify-content-between align-items-center">
-        <span className="text-muted">{clusterLabel}</span>
+        <span className="text-muted">{headerLeft}</span>
         <div>
           {deviceTypeLabel && <span className="text-muted me-2">{deviceTypeLabel}</span>}
           {endpoint.endpointId != null && (
@@ -95,19 +170,10 @@ function EndpointCard({
         </div>
       </div>
       <div className="card-body">
-        <div className="row g-2">
-          {endpoint.mappings.map((m, i) => {
-            const meta = ATTRIBUTE_META[m.cluster]?.[m.attribute]
-            const label = meta?.label ?? `Attr 0x${m.attribute.toString(16).padStart(4, '0')}`
-            const format = meta?.format ?? ((v: number) => String(v))
-            const reading = epReadings.find(
-              (r) => r.clusterId === m.cluster && r.attributeId === m.attribute,
-            )
-            return (
-              <AttributeCard key={i} label={label} value={reading?.value ?? null} format={format} />
-            )
-          })}
-        </div>
+        <AttributeRow mappings={endpoint.mappings} epReadings={epReadings} />
+        {endpoint.parts?.map((part, i) => (
+          <PartCard key={i} part={part} readings={readings} />
+        ))}
       </div>
     </div>
   )
