@@ -152,8 +152,6 @@ extern "C" void app_main()
         return;
     }
 
-    devices_store_init();
-
     DeviceManager::instance().init(node, agg_ep);
 
     web_server_start([]() {

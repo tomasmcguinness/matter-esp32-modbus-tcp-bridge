@@ -153,6 +153,7 @@ esp_err_t MatterManager::device_type_callback(esp_matter::endpoint_t *ep,
                                                uint32_t device_type_id,
                                                void *priv_data)
 {
+    ESP_LOGI(TAG, "Creating device for type 0x%08" PRIx32, device_type_id);
     if (device_type_id == ESP_MATTER_SOLAR_POWER_DEVICE_TYPE_ID) {
         solar_power::config_t cfg;
         if (solar_power::add(ep, &cfg) != ESP_OK) {
@@ -351,6 +352,8 @@ esp_err_t MatterManager::init(esp_matter::node_t *node, esp_matter::endpoint_t *
 {
     m_node                   = node;
     m_aggregator_endpoint_id = endpoint::get_id(aggregator);
+
+    devices_store_init();
 
     esp_err_t err = esp_matter_bridge::initialize(node, device_type_callback);
     if (err != ESP_OK) {

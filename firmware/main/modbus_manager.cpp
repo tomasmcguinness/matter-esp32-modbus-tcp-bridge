@@ -36,7 +36,7 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
 
 void ModbusManager::init()
 {
-    // Devices are loaded by DeviceManager::init via on_device_added.
+    // We want to react to Ethernet link events to pause/resume polling, so register an event handler.
     esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, eth_event_handler, nullptr);
 }
 
