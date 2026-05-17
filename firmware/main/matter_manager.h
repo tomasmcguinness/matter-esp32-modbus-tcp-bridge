@@ -26,8 +26,6 @@ public:
 
     void on_readings(const char *id, const std::vector<RegisterReading> &readings);
 
-    //IMatterDevice *find(const char *id) const;
-
     // endpoint_idx 0 = root, 1..N = parts in order
     struct AttributeMapping {
         uint16_t reg_address;

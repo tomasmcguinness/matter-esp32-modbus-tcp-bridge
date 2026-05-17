@@ -542,10 +542,3 @@ uint16_t MatterManager::endpoint_id(const char *id) const
         return 0;
     return it->endpoints[0].matter_dev->endpoint_id();
 }
-
-// IMatterDevice *MatterManager::find(const char *id) const
-// {
-//     auto it = std::find_if(m_devices.begin(), m_devices.end(),
-//         [id](IMatterDevice *d) { return strcmp(d->id(), id) == 0; });
-//     return it != m_devices.end() ? *it : nullptr;
-// }

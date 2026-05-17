@@ -194,5 +194,3 @@ bool SolarPowerDevice::get_raw(uint32_t cluster_id, uint32_t attribute_id, int64
 
     return false;
 }
-
-
