@@ -398,8 +398,10 @@ esp_err_t MatterManager::create_matter_device(const device_config_t &config)
     //
     BridgedMatterDevice bridge_matter_device;
     strncpy(bridge_matter_device.id, config.id, sizeof(bridge_matter_device.id) - 1);
+    
     bridge_matter_device.id[sizeof(bridge_matter_device.id) - 1] = '\0';
     bridge_matter_device.endpoints.push_back(root_entry);
+
     for (auto &pe : part_entries)
         bridge_matter_device.endpoints.push_back(pe);
     bridge_matter_device.mappings = all_mappings;
@@ -452,15 +454,20 @@ void MatterManager::on_readings(const char *id, const std::vector<RegisterReadin
         return;
     }
 
-    // for (const auto &r : readings) {
-    //     for (const auto &m : it->mappings) {
-    //         if (m.reg_address == r.address && m.endpoint_idx < it->endpoints.size()) {
-    //             IMatterDevice *dev = it->endpoints[m.endpoint_idx].matter_dev;
-    //             if (dev) dev->set_raw(m.cluster_id, m.attribute_id, r.value);
-    //             break;
-    //         }
-    //     }
-    // }
+    // We now need to find all the endpoints that are interested in these readings.
+    //
+    for (const auto &r : readings)
+    {
+        for (const auto &m : it->mappings)
+        {
+            if (m.reg_address == r.address && m.endpoint_idx < it->endpoints.size())
+            {
+                IMatterDevice *dev = it->endpoints[m.endpoint_idx].matter_dev;
+                if (dev)
+                    dev->set_raw(m.cluster_id, m.attribute_id, r.value);
+            }
+        }
+    }
 }
 
 bool MatterManager::get_readings(const char *id, DeviceReadings &out) const
@@ -478,10 +485,10 @@ bool MatterManager::get_readings(const char *id, DeviceReadings &out) const
         const EndpointEntry &entry = it->endpoints[m.endpoint_idx];
         if (!entry.matter_dev)
             continue;
-        // int64_t value = 0;
-        //  if (entry.matter_dev->get_raw(m.cluster_id, m.attribute_id, value)) {
-        //      out.push_back({entry.matter_dev->endpoint_id(), m.cluster_id, m.attribute_id, value});
-        //  }
+        int64_t value = 0;
+        if (entry.matter_dev->get_raw(m.cluster_id, m.attribute_id, value)) {
+            out.push_back({entry.matter_dev->endpoint_id(), m.cluster_id, m.attribute_id, value});
+        }
     }
     return true;
 }

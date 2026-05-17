@@ -18,7 +18,8 @@ const HARDCODED_MATTER_STRUCTURE = {
       parts: [
         {
           description: "Power Measurement for PV1",
-          deviceTypes: [0x0510], mappings: [
+          deviceTypes: [0x0510], 
+          mappings: [
             { function: 4, address: 0x0000, cluster: 0x0090, attribute: 0x0004 }, // Voltage
             { function: 4, address: 0x0001, cluster: 0x0090, attribute: 0x0005 }, // ActiveCurrent
             { function: 4, address: 0x0002, cluster: 0x0090, attribute: 0x0008 }, // ActivePower

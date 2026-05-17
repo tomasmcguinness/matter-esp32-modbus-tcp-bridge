@@ -123,6 +123,21 @@ void ElectricalSensorDevice::set_active_current(uint16_t raw_value)
         static_cast<intptr_t>(m_endpoint_id));
 }
 
+bool ElectricalSensorDevice::get_raw(uint32_t cluster_id, uint32_t attribute_id, int64_t &out) const
+{
+    ESP_LOGI(TAG, "Getting raw value for cluster=0x%08" PRIx32 ", attribute=0x%08" PRIx32, cluster_id, attribute_id);
+
+    if (cluster_id == ElectricalPowerMeasurement::Id)
+    {
+        if (attribute_id == Attributes::Voltage::Id)
+            return get_voltage_mv(out);
+        if (attribute_id == Attributes::ActiveCurrent::Id)
+            return get_active_current_ma(out);
+    }
+
+    return false;
+}
+
 void ElectricalSensorDevice::set_raw(uint32_t cluster_id, uint32_t attribute_id, uint16_t raw_value)
 {
     ESP_LOGI(TAG, "Received raw value update: cluster=0x%08" PRIx32 ", attribute=0x%08" PRIx32 ", value=%u", cluster_id, attribute_id, raw_value);

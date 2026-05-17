@@ -17,6 +17,7 @@ public:
     void set_active_current(uint16_t raw_value); // 0.1 A units → mA
 
     void set_raw(uint32_t cluster_id, uint32_t attribute_id, uint16_t raw_value) override;
+    bool get_raw(uint32_t cluster_id, uint32_t attribute_id, int64_t &out) const override;
 
     uint16_t endpoint_id() const override { return m_endpoint_id; }
 
