@@ -6,6 +6,7 @@
 #include "devices_store.h"
 #include "modbus_device.h"
 #include "solar_power_device.h"
+#include "electrical_sensor_device.h"
 #include "device_readings.h"
 #include <esp_matter_bridge.h>
 
@@ -15,7 +16,7 @@ public:
 
     esp_err_t init(esp_matter::node_t *node, esp_matter::endpoint_t *aggregator);
 
-    esp_err_t on_device_added(const device_config_t &config, ModbusDevice *modbus);
+    esp_err_t on_device_added(const device_config_t &config);
     esp_err_t on_device_removed(const char *id);
     void      clear();
 
@@ -24,6 +25,8 @@ public:
     bool get_readings(const char *id, DeviceReadings &out) const;
 
     void on_readings(const char *id, const std::vector<RegisterReading> &readings);
+
+    //IMatterDevice *find(const char *id) const;
 
     // endpoint_idx 0 = root, 1..N = parts in order
     struct AttributeMapping {
@@ -34,11 +37,11 @@ public:
     };
 
     struct EndpointEntry {
-        SolarPowerDevice            *matter     = nullptr;
+        IMatterDevice *matter_dev = nullptr;
         esp_matter_bridge::device_t *bridge_dev = nullptr;
     };
 
-    struct DevicePair {
+    struct BridgedMatterDevice {
         char                          id[DEVICE_ID_LEN];
         std::vector<EndpointEntry>    endpoints; // [0] = root, [1..] = parts
         std::vector<AttributeMapping> mappings;
@@ -50,7 +53,7 @@ public:
                                           uint32_t device_type_id,
                                           void *priv_data);
 
-    esp_err_t create_matter_device(const device_config_t &config, ModbusDevice *modbus);
+    esp_err_t create_matter_device(const device_config_t &config);
 
     EndpointEntry create_or_resume_endpoint(uint32_t device_type_id, uint16_t parent_ep_id,
                                              uint16_t stored_ep_id, const device_config_t &config,
@@ -60,5 +63,5 @@ public:
 
     esp_matter::node_t     *m_node                   = nullptr;
     uint16_t                m_aggregator_endpoint_id = chip::kInvalidEndpointId;
-    std::vector<DevicePair> m_devices;
+    std::vector<BridgedMatterDevice> m_devices;
 };

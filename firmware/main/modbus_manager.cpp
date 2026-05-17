@@ -7,7 +7,59 @@
 #include "esp_event.h"
 #include "esp_eth.h"
 
+#include "cJSON.h"
+
 static const char *TAG = "modbus_manager";
+
+static void collect_regs_from_endpoint(cJSON *ep, std::vector<RegisterSpec> &regs)
+{
+    cJSON *mappings = cJSON_GetObjectItemCaseSensitive(ep, "mappings");
+    if (!cJSON_IsArray(mappings)) return;
+    cJSON *m = nullptr;
+    cJSON_ArrayForEach(m, mappings) {
+        cJSON *func = cJSON_GetObjectItemCaseSensitive(m, "function");
+        cJSON *addr = cJSON_GetObjectItemCaseSensitive(m, "address");
+        if (!cJSON_IsNumber(func) || !cJSON_IsNumber(addr)) continue;
+        regs.push_back({(uint16_t)addr->valueint, func->valueint == 4});
+    }
+}
+
+static std::vector<RegisterSpec> build_register_specs(const char *matter_structure_json)
+{
+    std::vector<RegisterSpec> regs;
+    if (!matter_structure_json || matter_structure_json[0] == '\0') return regs;
+
+    cJSON *root = cJSON_Parse(matter_structure_json);
+    if (!root) return regs;
+
+    cJSON *endpoints = cJSON_GetObjectItemCaseSensitive(root, "endpoints");
+    if (cJSON_IsArray(endpoints)) {
+        cJSON *ep = nullptr;
+        cJSON_ArrayForEach(ep, endpoints) {
+            collect_regs_from_endpoint(ep, regs);
+
+            cJSON *parts = cJSON_GetObjectItemCaseSensitive(ep, "parts");
+            if (cJSON_IsArray(parts)) {
+                cJSON *part = nullptr;
+                cJSON_ArrayForEach(part, parts) {
+                    collect_regs_from_endpoint(part, regs);
+                }
+            }
+        }
+    }
+    cJSON_Delete(root);
+
+    // Remove duplicates — same address + function code may appear across root and parts.
+    regs.erase(std::remove_if(regs.begin(), regs.end(), [&](const RegisterSpec &a) {
+        for (const auto &b : regs) {
+            if (&b == &a) break;
+            if (b.address == a.address && b.input == a.input) return true;
+        }
+        return false;
+    }), regs.end());
+
+    return regs;
+}
 
 ModbusManager &ModbusManager::instance()
 {
@@ -48,9 +100,16 @@ void ModbusManager::start_polling()
     ESP_LOGI(TAG, "Polling started for %zu device(s)", m_devices.size());
 }
 
-void ModbusManager::on_device_added(const device_config_t &config, const std::vector<RegisterSpec> &regs,
-                                     ModbusDevice::readings_cb_t cb)
+void ModbusManager::on_device_added(const device_config_t &config, ModbusDevice::readings_cb_t cb)
 {
+    auto regs = build_register_specs(config.matter_structure_json);
+
+    ESP_LOGI(TAG, "Registers to read:");
+
+    for (auto i: regs) {
+        ESP_LOGI(TAG, " - %s register at address %u", i.input ? "Input" : "Holding", i.address);
+    }
+
     create_device(config, regs, cb);
     ESP_LOGI(TAG, "Device added: %s", config.id);
 }
@@ -96,3 +155,5 @@ ModbusDevice *ModbusManager::find(const char *id) const
         [id](ModbusDevice *d) { return strcmp(d->id(), id) == 0; });
     return it != m_devices.end() ? *it : nullptr;
 }
+
+

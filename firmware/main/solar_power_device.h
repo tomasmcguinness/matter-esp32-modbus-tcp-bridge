@@ -4,10 +4,11 @@
 #include "esp_matter.h"
 #include "devices_store.h"
 #include <esp_matter_bridge.h>
+#include "matter_device.h"
 
 #include <app/clusters/electrical-power-measurement-server/electrical-power-measurement-server.h>
 
-class SolarPowerDevice : public chip::app::Clusters::ElectricalPowerMeasurement::Delegate
+class SolarPowerDevice : public IMatterDevice, public chip::app::Clusters::ElectricalPowerMeasurement::Delegate
 {
 public:
     SolarPowerDevice(esp_matter_bridge::device_t *dev, const device_config_t &config);
@@ -16,10 +17,10 @@ public:
     void set_voltage(uint16_t raw_value);
     void set_active_current(int16_t raw_value);
     void set_active_power(int16_t raw_value);
-    void set_raw(uint32_t cluster_id, uint32_t attribute_id, uint16_t raw_value);
+    void set_raw(uint32_t cluster_id, uint32_t attribute_id, uint16_t raw_value) override;
     bool get_raw(uint32_t cluster_id, uint32_t attribute_id, int64_t &out) const;
 
-    uint16_t endpoint_id() const { return m_endpoint_id; }
+    uint16_t endpoint_id() const override { return m_endpoint_id; }
 
     bool get_voltage_mv(int64_t &out) const
     {

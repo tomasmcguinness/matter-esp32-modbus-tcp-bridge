@@ -58,11 +58,12 @@ CHIP_ERROR ElectricalSensorDevice::GetAccuracyByIndex(uint8_t index,
     return CHIP_NO_ERROR;
 }
 
-ElectricalSensorDevice::ElectricalSensorDevice(esp_matter_bridge::device_t *dev, const char *label)
+ElectricalSensorDevice::ElectricalSensorDevice(esp_matter_bridge::device_t *dev, const device_config_t &config)
     : m_endpoint_id(0)
 {
-    if (!dev || !dev->endpoint) {
-        ESP_LOGE(TAG, "[%s] Invalid bridge device", label);
+    if (!dev || !dev->endpoint)
+    {
+        ESP_LOGE(TAG, "[%s] Invalid bridge device", config.id);
         return;
     }
 
@@ -79,7 +80,7 @@ ElectricalSensorDevice::ElectricalSensorDevice(esp_matter_bridge::device_t *dev,
     m_epm_instance->Init();
 
     m_endpoint_id = ep_id;
-    ESP_LOGI(TAG, "[%s] EPM instance attached: ep=%u", label, m_endpoint_id);
+    ESP_LOGI(TAG, "[%s] ElectricalSensor instance attached: ep=%u", config.id, m_endpoint_id);
 }
 
 ElectricalSensorDevice::~ElectricalSensorDevice()
@@ -120,4 +121,17 @@ void ElectricalSensorDevice::set_active_current(uint16_t raw_value)
                 Attributes::ActiveCurrent::Id);
         },
         static_cast<intptr_t>(m_endpoint_id));
+}
+
+void ElectricalSensorDevice::set_raw(uint32_t cluster_id, uint32_t attribute_id, uint16_t raw_value)
+{
+    ESP_LOGI(TAG, "Received raw value update: cluster=0x%08" PRIx32 ", attribute=0x%08" PRIx32 ", value=%u", cluster_id, attribute_id, raw_value);
+
+    if (cluster_id == ElectricalPowerMeasurement::Id)
+    {
+        if (attribute_id == Attributes::Voltage::Id)
+            set_voltage(raw_value);
+        else if (attribute_id == Attributes::ActiveCurrent::Id)
+            set_active_current(raw_value);
+    }
 }

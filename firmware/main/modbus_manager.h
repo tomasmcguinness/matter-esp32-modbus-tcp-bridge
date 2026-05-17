@@ -14,8 +14,7 @@ public:
     void pause_all();
     void resume_all();
 
-    void on_device_added(const device_config_t &config, const std::vector<RegisterSpec> &regs,
-                         ModbusDevice::readings_cb_t cb = nullptr);
+    void on_device_added(const device_config_t &config, ModbusDevice::readings_cb_t cb = nullptr);
     void on_device_removed(const char *id);
     void clear();
 

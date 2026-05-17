@@ -9,57 +9,10 @@ static const char *TAG = "device_manager";
 
 static void readings_dispatch_cb(const std::vector<RegisterReading> &readings, void *arg)
 {
+    // We have received new readings from a Modbus device.
+    // Locate the Matter Device and update its attributes accordingly.
+    //
     MatterManager::instance().on_readings(static_cast<const char *>(arg), readings);
-}
-
-static void collect_regs_from_endpoint(cJSON *ep, std::vector<RegisterSpec> &regs)
-{
-    cJSON *mappings = cJSON_GetObjectItemCaseSensitive(ep, "mappings");
-    if (!cJSON_IsArray(mappings)) return;
-    cJSON *m = nullptr;
-    cJSON_ArrayForEach(m, mappings) {
-        cJSON *func = cJSON_GetObjectItemCaseSensitive(m, "function");
-        cJSON *addr = cJSON_GetObjectItemCaseSensitive(m, "address");
-        if (!cJSON_IsNumber(func) || !cJSON_IsNumber(addr)) continue;
-        regs.push_back({(uint16_t)addr->valueint, func->valueint == 4});
-    }
-}
-
-static std::vector<RegisterSpec> build_register_specs(const char *matter_structure_json)
-{
-    std::vector<RegisterSpec> regs;
-    if (!matter_structure_json || matter_structure_json[0] == '\0') return regs;
-
-    cJSON *root = cJSON_Parse(matter_structure_json);
-    if (!root) return regs;
-
-    cJSON *endpoints = cJSON_GetObjectItemCaseSensitive(root, "endpoints");
-    if (cJSON_IsArray(endpoints)) {
-        cJSON *ep = nullptr;
-        cJSON_ArrayForEach(ep, endpoints) {
-            collect_regs_from_endpoint(ep, regs);
-
-            cJSON *parts = cJSON_GetObjectItemCaseSensitive(ep, "parts");
-            if (cJSON_IsArray(parts)) {
-                cJSON *part = nullptr;
-                cJSON_ArrayForEach(part, parts) {
-                    collect_regs_from_endpoint(part, regs);
-                }
-            }
-        }
-    }
-    cJSON_Delete(root);
-
-    // Remove duplicates — same address + function code may appear across root and parts.
-    regs.erase(std::remove_if(regs.begin(), regs.end(), [&](const RegisterSpec &a) {
-        for (const auto &b : regs) {
-            if (&b == &a) break;
-            if (b.address == a.address && b.input == a.input) return true;
-        }
-        return false;
-    }), regs.end());
-
-    return regs;
 }
 
 DeviceManager &DeviceManager::instance()
@@ -70,15 +23,29 @@ DeviceManager &DeviceManager::instance()
 
 esp_err_t DeviceManager::init(esp_matter::node_t *node, esp_matter::endpoint_t *aggregator)
 {
+    ESP_LOGI(TAG, "Initializing...");
+
     ModbusManager::instance().init();
+    MatterManager::instance().init(node, aggregator);
 
     size_t count = devices_store_count();
+
+    ESP_LOGI(TAG, "There are %u devices to initialize...", count);
+
     for (size_t i = 0; i < count; i++) {
+
         const device_config_t *cfg = devices_store_at(i);
-        auto regs = build_register_specs(cfg->matter_structure_json);
-        ModbusManager::instance().on_device_added(*cfg, regs, readings_dispatch_cb);
+
+        // For each device in the store, we need to create a ModbusDevice
+        // and a series of Matter endpoints according to the stored matter_structure_json.
+        //
+        ESP_LOGI(TAG, "Initializing device '%s' from store with id '%s'...", cfg->name, cfg->id);
+
+        ModbusManager::instance().on_device_added(*cfg, readings_dispatch_cb);
+        MatterManager::instance().on_device_added(*cfg);
     }
-    return MatterManager::instance().init(node, aggregator);
+
+    return ESP_OK;
 }
 
 void DeviceManager::start_polling()
@@ -90,28 +57,20 @@ esp_err_t DeviceManager::register_device(const device_config_t &config)
 {
     ESP_LOGI(TAG, "Registering device '%s' with Matter", config.name);
 
-    auto regs = build_register_specs(config.matter_structure_json);
-
-    ESP_LOGI(TAG, "Registering registers to read");
-
-    for (auto i: regs) {
-        ESP_LOGI(TAG, "  - %s register at address %u", i.input ? "Input" : "Holding", i.address);
-    }
-
     ESP_LOGI(TAG, "Adding device to ModbusManager");
-    ModbusManager::instance().on_device_added(config, regs, readings_dispatch_cb);
-
-    ModbusDevice *modbus = ModbusManager::instance().find(config.id);
+    ModbusManager::instance().on_device_added(config, readings_dispatch_cb);
 
     ESP_LOGI(TAG, "Adding device to MatterManager");
-    esp_err_t err = MatterManager::instance().on_device_added(config, modbus);
+    esp_err_t err = MatterManager::instance().on_device_added(config);
 
     if (err == ESP_OK) {
+        ModbusDevice *modbus = ModbusManager::instance().find(config.id);
         modbus->start_polling();
     } else {
         ModbusManager::instance().on_device_removed(config.id);
         ESP_LOGE(TAG, "Failed to register Matter device for '%s', rolling back", config.id);
     }
+
     return err;
 }
 
@@ -126,7 +85,7 @@ esp_err_t DeviceManager::add_device(const char *name, const char *host,
                                     const char *matter_structure_json,
                                     device_config_t *out)
 {
-    ESP_LOGI(TAG, "Adding Modbus device: name=%s, host=%s, port=%u, unitId=%u", name, host, port, unit_id);
+    ESP_LOGI(TAG, "Adding device: name=%s, host=%s, port=%u, unitId=%u", name, host, port, unit_id);
 
     device_config_t created;
     esp_err_t err = devices_store_add(name, host, port, unit_id, matter_structure_json, &created);
