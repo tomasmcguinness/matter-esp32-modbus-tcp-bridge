@@ -87,18 +87,21 @@ esp_err_t DeviceManager::add_device(const char *name, const char *host,
 {
     ESP_LOGI(TAG, "Adding device: name=%s, host=%s, port=%u, unitId=%u", name, host, port, unit_id);
 
-    device_config_t created;
-    esp_err_t err = devices_store_add(name, host, port, unit_id, matter_structure_json, &created);
-    if (err != ESP_OK) return err;
+    device_config_t *created = new device_config_t();
+    if (!created) return ESP_ERR_NO_MEM;
 
-    ESP_LOGI(TAG, "Device '%s' stored with id '%s'", name, created.id);
+    esp_err_t err = devices_store_add(name, host, port, unit_id, matter_structure_json, created);
+    if (err != ESP_OK) { delete created; return err; }
 
-    err = register_device(created);
-    if (err != ESP_OK) return err;
+    ESP_LOGI(TAG, "Device '%s' stored with id '%s'", name, created->id);
+
+    err = register_device(*created);
+    if (err != ESP_OK) { delete created; return err; }
 
     // Re-read from store so `out` includes the endpoint ID written back by MatterManager.
-    const device_config_t *updated = devices_store_find(created.id);
-    if (out) *out = updated ? *updated : created;
+    const device_config_t *updated = devices_store_find(created->id);
+    if (out) *out = updated ? *updated : *created;
+    delete created;
     return ESP_OK;
 }
 
@@ -107,11 +110,16 @@ esp_err_t DeviceManager::update_device(const char *id, const char *name, const c
                                        const char *matter_structure_json,
                                        device_config_t *out)
 {
-    device_config_t updated;
+    device_config_t *updated = new device_config_t();
+    if (!updated) return ESP_ERR_NO_MEM;
+
     esp_err_t err = devices_store_update(id, name, host, port, unit_id,
-                                         matter_structure_json, &updated);
-    if (err != ESP_OK) return err;
-    return register_device(updated);
+                                         matter_structure_json, updated);
+    if (err != ESP_OK) { delete updated; return err; }
+
+    err = register_device(*updated);
+    delete updated;
+    return err;
 }
 
 esp_err_t DeviceManager::remove_device(const char *id)

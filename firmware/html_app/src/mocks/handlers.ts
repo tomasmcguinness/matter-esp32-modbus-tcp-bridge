@@ -125,8 +125,8 @@ export const handlers = [
 ]
 
 function mockValue(attributeId: number): number {
-  if (attributeId === 0x0008) return 243800   // ~243.8 V
+  if (attributeId === 0x0004) return 243800   // ~243.8 V
   if (attributeId === 0x0005) return 9500     // ~9.5 A
-  if (attributeId === 0x0002) return 2300000  // ~2300 W
+  if (attributeId === 0x0008) return 2300000  // ~2300 W
   return 0
 }

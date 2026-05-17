@@ -13,8 +13,9 @@ public:
     ElectricalSensorDevice(esp_matter_bridge::device_t *dev, const device_config_t &config);
     ~ElectricalSensorDevice();
 
-    void set_voltage(uint16_t raw_value);       // 0.1 V units → mV
-    void set_active_current(uint16_t raw_value); // 0.1 A units → mA
+    void set_voltage(uint16_t raw_value);        // 0.1 V units → mV
+    void set_active_current(int16_t raw_value);  // 0.1 A units → mA
+    void set_active_power(int16_t raw_value);    // 0.1 W units → mW
 
     void set_raw(uint32_t cluster_id, uint32_t attribute_id, uint16_t raw_value) override;
     bool get_raw(uint32_t cluster_id, uint32_t attribute_id, int64_t &out) const override;
@@ -31,11 +32,16 @@ public:
         out = m_active_current.Value();
         return true;
     }
+    bool get_active_power_mw(int64_t &out) const {
+        if (m_active_power.IsNull()) return false;
+        out = m_active_power.Value();
+        return true;
+    }
 
     chip::app::Clusters::ElectricalPowerMeasurement::PowerModeEnum GetPowerMode() override {
         return chip::app::Clusters::ElectricalPowerMeasurement::PowerModeEnum::kDc;
     }
-    uint8_t GetNumberOfMeasurementTypes() override { return 2; }
+    uint8_t GetNumberOfMeasurementTypes() override { return 3; }
 
     CHIP_ERROR StartAccuracyRead() override { return CHIP_NO_ERROR; }
     CHIP_ERROR GetAccuracyByIndex(uint8_t index,
@@ -67,7 +73,7 @@ public:
     chip::app::DataModel::Nullable<int64_t> GetActiveCurrent() override { return m_active_current; }
     chip::app::DataModel::Nullable<int64_t> GetReactiveCurrent() override { return chip::app::DataModel::NullNullable; }
     chip::app::DataModel::Nullable<int64_t> GetApparentCurrent() override { return chip::app::DataModel::NullNullable; }
-    chip::app::DataModel::Nullable<int64_t> GetActivePower() override { return chip::app::DataModel::NullNullable; }
+    chip::app::DataModel::Nullable<int64_t> GetActivePower() override { return m_active_power; }
     chip::app::DataModel::Nullable<int64_t> GetReactivePower() override { return chip::app::DataModel::NullNullable; }
     chip::app::DataModel::Nullable<int64_t> GetApparentPower() override { return chip::app::DataModel::NullNullable; }
     chip::app::DataModel::Nullable<int64_t> GetRMSVoltage() override { return chip::app::DataModel::NullNullable; }
@@ -81,5 +87,6 @@ private:
     uint16_t m_endpoint_id = 0;
     chip::app::DataModel::Nullable<int64_t> m_voltage;
     chip::app::DataModel::Nullable<int64_t> m_active_current;
+    chip::app::DataModel::Nullable<int64_t> m_active_power;
     chip::app::Clusters::ElectricalPowerMeasurement::Instance *m_epm_instance = nullptr;
 };

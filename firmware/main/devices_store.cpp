@@ -148,6 +148,8 @@ static esp_err_t persist(void)
             cJSON *ms = cJSON_Parse(d->matter_structure_json);
             if (ms) {
                 cJSON_AddItemToObject(o, "matter_structure", ms);
+            } else {
+                ESP_LOGW(TAG, "Failed to parse matter_structure_json for device '%s'; skipping", d->id);
             }
         }
         cJSON_AddItemToArray(root, o);

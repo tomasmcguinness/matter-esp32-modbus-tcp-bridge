@@ -32,6 +32,14 @@ static const Structs::MeasurementAccuracyRangeStruct::Type kCurrentRanges[] = {{
     .percentTypical = chip::MakeOptional(static_cast<chip::Percent100ths>(500)),
 }};
 
+static const Structs::MeasurementAccuracyRangeStruct::Type kPowerRanges[] = {{
+    .rangeMin       = -30'000'000,
+    .rangeMax       = 30'000'000,
+    .percentMax     = chip::MakeOptional(static_cast<chip::Percent100ths>(1000)),
+    .percentMin     = chip::MakeOptional(static_cast<chip::Percent100ths>(100)),
+    .percentTypical = chip::MakeOptional(static_cast<chip::Percent100ths>(500)),
+}};
+
 static const Structs::MeasurementAccuracyStruct::Type kAccuracies[] = {
     {
         .measurementType  = MeasurementTypeEnum::kVoltage,
@@ -46,6 +54,13 @@ static const Structs::MeasurementAccuracyStruct::Type kAccuracies[] = {
         .minMeasuredValue = 0,
         .maxMeasuredValue = 20'000,
         .accuracyRanges   = chip::app::DataModel::List<const Structs::MeasurementAccuracyRangeStruct::Type>(kCurrentRanges),
+    },
+    {
+        .measurementType  = MeasurementTypeEnum::kActivePower,
+        .measured         = true,
+        .minMeasuredValue = -30'000'000,
+        .maxMeasuredValue = 30'000'000,
+        .accuracyRanges   = chip::app::DataModel::List<const Structs::MeasurementAccuracyRangeStruct::Type>(kPowerRanges),
     },
 };
 
@@ -107,7 +122,7 @@ void ElectricalSensorDevice::set_voltage(uint16_t raw_value)
         static_cast<intptr_t>(m_endpoint_id));
 }
 
-void ElectricalSensorDevice::set_active_current(uint16_t raw_value)
+void ElectricalSensorDevice::set_active_current(int16_t raw_value)
 {
     // 0.1 A units → milliamps
     auto ma = chip::app::DataModel::MakeNullable(static_cast<int64_t>(raw_value) * 100);
@@ -123,6 +138,22 @@ void ElectricalSensorDevice::set_active_current(uint16_t raw_value)
         static_cast<intptr_t>(m_endpoint_id));
 }
 
+void ElectricalSensorDevice::set_active_power(int16_t raw_value)
+{
+    // W units → milliwatts
+    auto mw = chip::app::DataModel::MakeNullable(static_cast<int64_t>(raw_value) * 1000);
+    if (m_active_power == mw) return;
+    m_active_power = mw;
+    chip::DeviceLayer::PlatformMgr().ScheduleWork(
+        [](intptr_t arg) {
+            MatterReportingAttributeChangeCallback(
+                static_cast<chip::EndpointId>(arg),
+                ElectricalPowerMeasurement::Id,
+                Attributes::ActivePower::Id);
+        },
+        static_cast<intptr_t>(m_endpoint_id));
+}
+
 bool ElectricalSensorDevice::get_raw(uint32_t cluster_id, uint32_t attribute_id, int64_t &out) const
 {
     ESP_LOGI(TAG, "Getting raw value for cluster=0x%08" PRIx32 ", attribute=0x%08" PRIx32, cluster_id, attribute_id);
@@ -133,6 +164,8 @@ bool ElectricalSensorDevice::get_raw(uint32_t cluster_id, uint32_t attribute_id,
             return get_voltage_mv(out);
         if (attribute_id == Attributes::ActiveCurrent::Id)
             return get_active_current_ma(out);
+        if (attribute_id == Attributes::ActivePower::Id)
+            return get_active_power_mw(out);
     }
 
     return false;
@@ -147,6 +180,8 @@ void ElectricalSensorDevice::set_raw(uint32_t cluster_id, uint32_t attribute_id,
         if (attribute_id == Attributes::Voltage::Id)
             set_voltage(raw_value);
         else if (attribute_id == Attributes::ActiveCurrent::Id)
-            set_active_current(raw_value);
+            set_active_current((int16_t)raw_value);
+        else if (attribute_id == Attributes::ActivePower::Id)
+            set_active_power((int16_t)raw_value);
     }
 }

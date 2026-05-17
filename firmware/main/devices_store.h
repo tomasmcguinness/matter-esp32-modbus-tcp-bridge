@@ -14,7 +14,7 @@ extern "C" {
 #define DEVICES_MAX     32
 
 #define MATTER_ENDPOINT_ID_INVALID   0xFFFF
-#define MATTER_STRUCTURE_JSON_LEN    1024
+#define MATTER_STRUCTURE_JSON_LEN    2048
 
 typedef struct {
     char     id[DEVICE_ID_LEN];

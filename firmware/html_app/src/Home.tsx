@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 
 const CLUSTER_NAMES: Record<number, string> = {
-  0x0091: 'Electrical Power Measurement',
+  0x0090: 'Electrical Power Measurement',
 }
 
 const ATTRIBUTE_META: Record<number, Record<number, { label: string; format: (v: number) => string }>> = {
-  0x0091: {
-    0x0008: { label: 'Voltage',        format: (v) => `${(v / 1000).toFixed(1)} V`  },
-    0x0005: { label: 'Active Current',  format: (v) => `${(v / 1000).toFixed(2)} A` },
-    0x0002: { label: 'Active Power',    format: (v) => `${(v / 1000).toFixed(0)} W`  },
+  0x0090: {
+    0x0004: { label: 'Voltage',        format: (v) => `${(v / 1000).toFixed(1)} V`  },
+    0x0005: { label: 'Active Current', format: (v) => `${(v / 1000).toFixed(2)} A`  },
+    0x0008: { label: 'Active Power',   format: (v) => `${(v / 1000).toFixed(0)} W`  },
   },
 }
 

@@ -111,7 +111,7 @@ SolarPowerDevice::~SolarPowerDevice()
 
 void SolarPowerDevice::set_voltage(uint16_t raw_value)
 {
-        // Solax reports voltage in 0.1V units; Matter expects millivolts
+    // Solax reports voltage in 0.1V units; Matter expects millivolts
     auto mv = chip::app::DataModel::MakeNullable(static_cast<int64_t>(raw_value) * 100);
     if (m_voltage == mv)
         return;

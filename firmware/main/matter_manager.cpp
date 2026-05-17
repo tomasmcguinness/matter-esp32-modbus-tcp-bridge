@@ -373,14 +373,18 @@ esp_err_t MatterManager::create_matter_device(const device_config_t &config)
                                   : get_stored_part_ep_id(config.matter_structure_json, i));
         }
 
-        char updated_json[MATTER_STRUCTURE_JSON_LEN];
-        if (write_all_endpoint_ids(config.matter_structure_json,
-                                   persist_root_id,
-                                   persist_part_ids,
-                                   updated_json,
-                                   sizeof(updated_json)) == ESP_OK)
+        char *updated_json = (char *)malloc(MATTER_STRUCTURE_JSON_LEN);
+        if (updated_json)
         {
-            devices_store_update_matter_structure(config.id, updated_json);
+            if (write_all_endpoint_ids(config.matter_structure_json,
+                                       persist_root_id,
+                                       persist_part_ids,
+                                       updated_json,
+                                       MATTER_STRUCTURE_JSON_LEN) == ESP_OK)
+            {
+                devices_store_update_matter_structure(config.id, updated_json);
+            }
+            free(updated_json);
         }
     }
 

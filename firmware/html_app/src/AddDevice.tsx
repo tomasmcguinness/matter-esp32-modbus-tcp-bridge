@@ -5,7 +5,7 @@ const HARDCODED_MATTER_STRUCTURE = {
   endpoints: [
     {
       description: "The Inverter itself",
-      deviceTypes: [0x0017], //, 0x0510],
+      deviceTypes: [0x0017],
       mappings: [
         // This probably needs a *type* field, to help with uint vs int etc.
         { function: 4, address: 0x0000, cluster: 0x0090, attribute: 0x0004 }, // Voltage
@@ -20,17 +20,28 @@ const HARDCODED_MATTER_STRUCTURE = {
           description: "Power Measurement for PV1",
           deviceTypes: [0x0510], 
           mappings: [
-            { function: 4, address: 0x0000, cluster: 0x0090, attribute: 0x0004 }, // Voltage
-            { function: 4, address: 0x0001, cluster: 0x0090, attribute: 0x0005 }, // ActiveCurrent
-            { function: 4, address: 0x0002, cluster: 0x0090, attribute: 0x0008 }, // ActivePower
+            { function: 4, address: 0x0003, cluster: 0x0090, attribute: 0x0004 }, // Voltage
+            { function: 4, address: 0x0005, cluster: 0x0090, attribute: 0x0005 }, // ActiveCurrent
+            { function: 4, address: 0x000A, cluster: 0x0090, attribute: 0x0008 }, // ActivePower
+
           ]
         },
         {
           description: "Power Measurement for PV2",
-          deviceTypes: [0x0510], mappings: [
-            { function: 4, address: 0x0000, cluster: 0x0090, attribute: 0x0004 }, // Voltage
-            { function: 4, address: 0x0001, cluster: 0x0090, attribute: 0x0005 }, // ActiveCurrent
-            { function: 4, address: 0x0002, cluster: 0x0090, attribute: 0x0008 }, // ActivePower
+          deviceTypes: [0x0510], 
+          mappings: [
+            { function: 4, address: 0x0004, cluster: 0x0090, attribute: 0x0004 }, // Voltage
+            { function: 4, address: 0x0006, cluster: 0x0090, attribute: 0x0005 }, // ActiveCurrent
+            { function: 4, address: 0x000B, cluster: 0x0090, attribute: 0x0008 }, // ActivePower
+          ]
+        },
+        {
+          description: "Battery",
+          deviceTypes: [0x0510], 
+          mappings: [
+            { function: 4, address: 0x0014, cluster: 0x0090, attribute: 0x0004 }, // Voltage
+            { function: 4, address: 0x0015, cluster: 0x0090, attribute: 0x0005 }, // ActiveCurrent
+            { function: 4, address: 0x0016, cluster: 0x0090, attribute: 0x0008 }, // ActivePower
           ]
         }
       ]

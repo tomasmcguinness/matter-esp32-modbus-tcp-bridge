@@ -85,7 +85,7 @@ static esp_err_t send_file(httpd_req_t *req, const char *fs_path)
 
 #define DEVICES_API_PREFIX     "/api/devices"
 #define DEVICES_API_PREFIX_LEN 12
-#define MAX_POST_BODY          2048
+#define MAX_POST_BODY          4096
 
 static esp_err_t send_json(httpd_req_t *req, cJSON *root, int status)
 {
@@ -111,7 +111,9 @@ static cJSON *device_to_json(const device_config_t *d)
     cJSON_AddStringToObject(o, "host",   d->host);
     cJSON_AddNumberToObject(o, "port",   d->port);
     cJSON_AddNumberToObject(o, "unitId", d->unit_id);
+
     if (d->matter_structure_json[0] != '\0') {
+        ESP_LOGI(TAG, "Parsing matter_structure_json for device '%s': %s", d->id, d->matter_structure_json);
         cJSON *ms = cJSON_Parse(d->matter_structure_json);
         if (ms) cJSON_AddItemToObject(o, "matter_structure", ms);
     }
