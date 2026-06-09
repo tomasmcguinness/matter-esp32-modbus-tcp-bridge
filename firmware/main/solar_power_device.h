@@ -11,7 +11,7 @@
 class SolarPowerDevice : public IMatterDevice, public chip::app::Clusters::ElectricalPowerMeasurement::Delegate
 {
 public:
-    SolarPowerDevice(esp_matter_bridge::device_t *dev, const device_config_t &config);
+    SolarPowerDevice(esp_matter::endpoint_t *ep, const device_config_t &config);
     ~SolarPowerDevice();
 
     void set_voltage(uint16_t raw_value);

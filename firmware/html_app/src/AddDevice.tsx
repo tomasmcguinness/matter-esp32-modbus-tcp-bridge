@@ -37,11 +37,12 @@ const HARDCODED_MATTER_STRUCTURE = {
         },
         {
           description: "Battery",
-          deviceTypes: [0x0510], 
+          deviceTypes: [0x0510, 0x011], // Electrical Sensor + Power Source
           mappings: [
             { function: 4, address: 0x0014, cluster: 0x0090, attribute: 0x0004 }, // Voltage
             { function: 4, address: 0x0015, cluster: 0x0090, attribute: 0x0005 }, // ActiveCurrent
             { function: 4, address: 0x0016, cluster: 0x0090, attribute: 0x0008 }, // ActivePower
+            { function: 4, address: 0x001C, cluster: 0x002F, attribute: 0x000C }, // BatPercentRemaining
           ]
         }
       ]

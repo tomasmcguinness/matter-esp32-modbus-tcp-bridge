@@ -4,13 +4,13 @@ title: Broadcast Modbus connection status to the UI via WebSockets
 status: To Do
 assignee: []
 created_date: '2026-04-24 05:51'
+updated_date: '2026-05-18 04:58'
 labels:
   - websocket
   - ui
   - modbus
 dependencies:
   - TASK-12
-priority: medium
 ---
 
 ## Description

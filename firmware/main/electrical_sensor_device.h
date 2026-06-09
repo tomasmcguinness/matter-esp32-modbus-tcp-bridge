@@ -10,12 +10,14 @@
 
 class ElectricalSensorDevice : public IMatterDevice, public chip::app::Clusters::ElectricalPowerMeasurement::Delegate {
 public:
-    ElectricalSensorDevice(esp_matter_bridge::device_t *dev, const device_config_t &config);
+    ElectricalSensorDevice(esp_matter::endpoint_t *ep, const device_config_t &config);
     ~ElectricalSensorDevice();
 
     void set_voltage(uint16_t raw_value);        // 0.1 V units → mV
     void set_active_current(int16_t raw_value);  // 0.1 A units → mA
     void set_active_power(int16_t raw_value);    // 0.1 W units → mW
+    // Optional: only used when the endpoint is also composed with a Power Source device type.
+    void set_bat_percent_remaining(uint16_t raw_value); // 0-100 % → 0-200 half-percent (PowerSource)
 
     void set_raw(uint32_t cluster_id, uint32_t attribute_id, uint16_t raw_value) override;
     bool get_raw(uint32_t cluster_id, uint32_t attribute_id, int64_t &out) const override;
@@ -35,6 +37,11 @@ public:
     bool get_active_power_mw(int64_t &out) const {
         if (m_active_power.IsNull()) return false;
         out = m_active_power.Value();
+        return true;
+    }
+    bool get_bat_percent_remaining(int64_t &out) const {
+        if (m_bat_percent.IsNull()) return false;
+        out = m_bat_percent.Value();
         return true;
     }
 
@@ -88,5 +95,6 @@ private:
     chip::app::DataModel::Nullable<int64_t> m_voltage;
     chip::app::DataModel::Nullable<int64_t> m_active_current;
     chip::app::DataModel::Nullable<int64_t> m_active_power;
+    chip::app::DataModel::Nullable<uint8_t> m_bat_percent; // 0-200 half-percent (Matter units)
     chip::app::Clusters::ElectricalPowerMeasurement::Instance *m_epm_instance = nullptr;
 };

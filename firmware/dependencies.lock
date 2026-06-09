@@ -209,7 +209,7 @@ dependencies:
       type: service
     version: 1.11.1
   espressif/rmaker_common:
-    component_hash: 00cbd881ba9dcf239f7958a2102cabdcb86a14d25a6a3a7e9cd5c44ab7ab70e7
+    component_hash: 656b0e3c3225b3acd9951689b9bad52896c3ba5009cd2ffe3c20e78500885e41
     dependencies:
     - name: espressif/mqtt
       registry_url: https://components.espressif.com
@@ -223,11 +223,11 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 1.8.1
+    version: 1.8.2
   idf:
     source:
       type: idf
-    version: 5.4.1
+    version: 5.5.4
   joltwallet/littlefs:
     component_hash: 29eff7921c4e8bce021aeb7fff2723bfcafed661756de700646ea0f6223c2a32
     dependencies:
@@ -242,6 +242,6 @@ direct_dependencies:
 - espressif/esp_matter
 - espressif/mdns
 - joltwallet/littlefs
-manifest_hash: db50c5aabecdb8a452136d14056c509e0a4b5438178afb27b3f5b6563e8eead1
+manifest_hash: 2cbe755e0b32426d2a2051c711601944b6468def913c20b65cae02e974d301f2
 target: esp32s3
 version: 2.0.0

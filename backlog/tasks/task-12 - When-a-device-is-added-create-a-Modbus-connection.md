@@ -4,8 +4,9 @@ title: 'When a device is added, create a Modbus connection'
 status: Done
 assignee: []
 created_date: '2026-04-24 05:38'
-updated_date: '2026-04-24 06:25'
+updated_date: '2026-05-18 05:00'
 labels: []
+milestone: m-1
 dependencies: []
 ordinal: 1000
 ---

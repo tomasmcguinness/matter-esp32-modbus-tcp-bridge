@@ -1,11 +1,14 @@
 ---
 id: TASK-10
-title: All the type of device to be selected when it is being added
+title: >-
+  Allow the user to provide a mapping between Modbus registers and Matter
+  clusters/attributes
 status: To Do
 assignee: []
 created_date: '2026-04-24 05:36'
-updated_date: '2026-04-24 05:39'
+updated_date: '2026-05-18 05:02'
 labels: []
+milestone: m-4
 dependencies: []
 ordinal: 6000
 ---

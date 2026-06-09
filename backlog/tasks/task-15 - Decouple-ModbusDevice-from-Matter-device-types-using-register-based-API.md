@@ -4,10 +4,11 @@ title: Decouple ModbusDevice from Matter device types using register-based API
 status: Done
 assignee: []
 created_date: '2026-05-15 15:27'
-updated_date: '2026-05-15 15:29'
+updated_date: '2026-05-18 05:01'
 labels: []
 dependencies: []
 priority: high
+ordinal: 7000
 ---
 
 ## Description

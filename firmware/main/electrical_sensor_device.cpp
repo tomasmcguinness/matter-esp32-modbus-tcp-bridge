@@ -8,6 +8,9 @@
 #include <app/reporting/reporting.h>
 #include <platform/CHIPDeviceLayer.h>
 
+#include <clusters/PowerSource/ClusterId.h>
+#include <clusters/PowerSource/AttributeIds.h>
+
 static const char *TAG = "electrical_sensor_device";
 
 using namespace esp_matter;
@@ -73,16 +76,16 @@ CHIP_ERROR ElectricalSensorDevice::GetAccuracyByIndex(uint8_t index,
     return CHIP_NO_ERROR;
 }
 
-ElectricalSensorDevice::ElectricalSensorDevice(esp_matter_bridge::device_t *dev, const device_config_t &config)
+ElectricalSensorDevice::ElectricalSensorDevice(esp_matter::endpoint_t *ep, const device_config_t &config)
     : m_endpoint_id(0)
 {
-    if (!dev || !dev->endpoint)
+    if (!ep)
     {
-        ESP_LOGE(TAG, "[%s] Invalid bridge device", config.id);
+        ESP_LOGE(TAG, "[%s] Invalid endpoint", config.id);
         return;
     }
 
-    uint16_t ep_id = endpoint::get_id(dev->endpoint);
+    uint16_t ep_id = endpoint::get_id(ep);
 
     chip::BitMask<OptionalAttributes> optional_attrs;
     optional_attrs.Set(OptionalAttributes::kOptionalAttributeVoltage);
@@ -154,6 +157,25 @@ void ElectricalSensorDevice::set_active_power(int16_t raw_value)
         static_cast<intptr_t>(m_endpoint_id));
 }
 
+void ElectricalSensorDevice::set_bat_percent_remaining(uint16_t raw_value)
+{
+    // Solax reports SoC as plain percent (0-100); Matter BatPercentRemaining is 0-200 half-percent.
+    uint16_t scaled = raw_value * 2;
+    if (scaled > 200)
+        scaled = 200;
+    uint8_t scaled8 = static_cast<uint8_t>(scaled);
+    auto pct = chip::app::DataModel::MakeNullable(scaled8);
+    if (m_bat_percent == pct)
+        return;
+    m_bat_percent = pct;
+
+    // The PowerSource cluster has no Delegate/Instance here; write straight to the attribute store.
+    // esp_matter::attribute::update takes the chip stack lock internally (safe from this task).
+    esp_matter_attr_val_t val = esp_matter_nullable_uint8(scaled8);
+    esp_matter::attribute::update(m_endpoint_id, PowerSource::Id,
+                                  PowerSource::Attributes::BatPercentRemaining::Id, &val);
+}
+
 bool ElectricalSensorDevice::get_raw(uint32_t cluster_id, uint32_t attribute_id, int64_t &out) const
 {
     ESP_LOGI(TAG, "Getting raw value for cluster=0x%08" PRIx32 ", attribute=0x%08" PRIx32, cluster_id, attribute_id);
@@ -166,6 +188,11 @@ bool ElectricalSensorDevice::get_raw(uint32_t cluster_id, uint32_t attribute_id,
             return get_active_current_ma(out);
         if (attribute_id == Attributes::ActivePower::Id)
             return get_active_power_mw(out);
+    }
+    else if (cluster_id == PowerSource::Id)
+    {
+        if (attribute_id == PowerSource::Attributes::BatPercentRemaining::Id)
+            return get_bat_percent_remaining(out);
     }
 
     return false;
@@ -183,5 +210,10 @@ void ElectricalSensorDevice::set_raw(uint32_t cluster_id, uint32_t attribute_id,
             set_active_current((int16_t)raw_value);
         else if (attribute_id == Attributes::ActivePower::Id)
             set_active_power((int16_t)raw_value);
+    }
+    else if (cluster_id == PowerSource::Id)
+    {
+        if (attribute_id == PowerSource::Attributes::BatPercentRemaining::Id)
+            set_bat_percent_remaining(raw_value);
     }
 }

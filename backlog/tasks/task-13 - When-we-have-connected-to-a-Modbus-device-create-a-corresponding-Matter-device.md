@@ -3,13 +3,13 @@ id: TASK-13
 title: >-
   When we have connected to a Modbus device, create a corresponding Matter
   device
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-04-24 05:38'
-updated_date: '2026-04-24 09:24'
+updated_date: '2026-05-18 04:58'
 labels: []
 dependencies: []
-ordinal: 1000
+ordinal: 8000
 ---
 
 ## Description

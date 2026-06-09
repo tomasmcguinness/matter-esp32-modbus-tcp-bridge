@@ -11,6 +11,7 @@
 #include <platform/CHIPDeviceLayer.h>
 
 #include <clusters/BridgedDeviceBasicInformation/ClusterId.h>
+#include <clusters/PowerSource/ClusterId.h>
 #include <app/clusters/electrical-power-measurement-server/electrical-power-measurement-server.h>
 
 using namespace esp_matter;
@@ -173,11 +174,11 @@ static esp_err_t write_all_endpoint_ids(const char *json_in,
 // Bridge callbacks
 // ---------------------------------------------------------------------------
 
-esp_err_t MatterManager::device_type_callback(esp_matter::endpoint_t *ep,
-                                              uint32_t device_type_id,
-                                              void *priv_data)
+// Add the device-type clusters for `device_type_id` to an existing endpoint. Shared by the bridge
+// callback (root/bridged endpoints) and by composed part endpoints created directly.
+static esp_err_t add_device_clusters(esp_matter::endpoint_t *ep, uint32_t device_type_id)
 {
-    ESP_LOGI(TAG, "Creating device for type 0x%08" PRIx32, device_type_id);
+    ESP_LOGI(TAG, "Adding device type 0x%08" PRIx32, device_type_id);
 
     if (device_type_id == ESP_MATTER_SOLAR_POWER_DEVICE_TYPE_ID)
     {
@@ -188,10 +189,30 @@ esp_err_t MatterManager::device_type_callback(esp_matter::endpoint_t *ep,
             return ESP_FAIL;
         }
     }
+    else if (device_type_id == ESP_MATTER_POWER_SOURCE_DEVICE_TYPE_ID)
+    {
+        power_source_device::config_t cfg;
+        cfg.power_source.feature_flags = power_source::feature::battery::get_id(); // TODO Assume battery for now.
+
+        if (power_source_device::add(ep, &cfg) != ESP_OK)
+        {
+            ESP_LOGE(TAG, "power_source_device::add failed");
+            return ESP_FAIL;
+        }
+
+        // BatPercentRemaining (state of charge) is an optional battery attribute that
+        // power_source_device::add does not create, so add it explicitly (0-200 half-percent).
+        cluster_t *ps = cluster::get(ep, chip::app::Clusters::PowerSource::Id);
+        if (ps)
+            power_source::attribute::create_bat_percent_remaining(ps, nullable<uint8_t>(), 0, 200);
+    }
     else if (device_type_id == ESP_MATTER_ELECTRICAL_SENSOR_DEVICE_TYPE_ID)
     {
         electrical_sensor::config_t cfg;
+
+        // The feature flag configuration needs to come from the JSON!
         cfg.electrical_power_measurement.feature_flags |= electrical_power_measurement::feature::alternating_current::get_id();
+
         if (electrical_sensor::add(ep, &cfg) != ESP_OK)
         {
             ESP_LOGE(TAG, "electrical_sensor::add failed");
@@ -200,8 +221,19 @@ esp_err_t MatterManager::device_type_callback(esp_matter::endpoint_t *ep,
     }
     else
     {
-        ESP_LOGW(TAG, "No cluster setup for device type 0x%08" PRIx32 ", using bare bridged node", device_type_id);
+        ESP_LOGW(TAG, "No cluster setup for device type 0x%08" PRIx32, device_type_id);
     }
+    return ESP_OK;
+}
+
+esp_err_t MatterManager::device_type_callback(esp_matter::endpoint_t *ep,
+                                              uint32_t device_type_id,
+                                              void *priv_data)
+{
+    ESP_LOGI(TAG, "Creating bridged device for type 0x%08" PRIx32, device_type_id);
+
+    if (add_device_clusters(ep, device_type_id) != ESP_OK)
+        return ESP_FAIL;
 
     // Set the node label to the device name for easier identification of the bridged devices.
     //
@@ -218,6 +250,24 @@ esp_err_t MatterManager::device_type_callback(esp_matter::endpoint_t *ep,
     }
 
     return ESP_OK;
+}
+
+// Instantiate the concrete IMatterDevice (which owns the cluster delegates) that matches the
+// endpoint's Matter device type. Keep this in sync with add_device_clusters above.
+static IMatterDevice *make_matter_dev(uint32_t device_type_id,
+                                      esp_matter::endpoint_t *ep,
+                                      const device_config_t &config)
+{
+    switch (device_type_id)
+    {
+    case ESP_MATTER_SOLAR_POWER_DEVICE_TYPE_ID:
+        return new SolarPowerDevice(ep, config);
+    case ESP_MATTER_ELECTRICAL_SENSOR_DEVICE_TYPE_ID:
+    default:
+        // ElectricalSensorDevice handles the EPM cluster (voltage/current/power) and, when the
+        // endpoint is also composed with a Power Source device type, the PowerSource state of charge.
+        return new ElectricalSensorDevice(ep, config);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -262,6 +312,62 @@ MatterManager::EndpointEntry MatterManager::create_or_resume_endpoint(
         new_ep_id_out = endpoint::get_id(entry.bridge_dev->endpoint);
     }
 
+    if (entry.bridge_dev)
+        entry.endpoint = entry.bridge_dev->endpoint;
+    return entry;
+}
+
+MatterManager::EndpointEntry MatterManager::create_or_resume_part(
+    const std::vector<uint32_t> &device_types, esp_matter::endpoint_t *parent_ep,
+    uint16_t stored_ep_id, const device_config_t &config,
+    bool &newly_created_out, uint16_t &new_ep_id_out)
+{
+    EndpointEntry entry;
+    newly_created_out = false;
+    new_ep_id_out = MATTER_ENDPOINT_ID_INVALID;
+
+    void *priv = const_cast<device_config_t *>(&config);
+    uint32_t primary_type = device_types.empty() ? ESP_MATTER_ELECTRICAL_SENSOR_DEVICE_TYPE_ID
+                                                 : device_types.front();
+
+    // Parts are plain composed endpoints (no BridgedDeviceBasicInformation). The bridge API only
+    // permits aggregator-parented devices, so we build them the same way common::create does and
+    // then parent them to the root endpoint. resume() re-uses the stored id so part endpoint ids
+    // stay stable across reboots.
+    if (stored_ep_id != MATTER_ENDPOINT_ID_INVALID)
+    {
+        entry.endpoint = esp_matter::endpoint::resume(m_node, ENDPOINT_FLAG_DESTROYABLE, stored_ep_id, priv);
+        if (!entry.endpoint)
+            ESP_LOGW(TAG, "[%s] resume part ep=%u failed, recreating", config.id, stored_ep_id);
+    }
+
+    if (!entry.endpoint)
+    {
+        entry.endpoint = esp_matter::endpoint::create(m_node, ENDPOINT_FLAG_DESTROYABLE, priv);
+        if (!entry.endpoint)
+        {
+            ESP_LOGE(TAG, "[%s] endpoint::create failed for part type=0x%08" PRIx32, config.id, primary_type);
+            return entry;
+        }
+        newly_created_out = true;
+        new_ep_id_out = endpoint::get_id(entry.endpoint);
+    }
+
+    // Mirror common::create: descriptor cluster, then the device-type clusters. A part may declare
+    // multiple device types (e.g. Electrical Sensor + Power Source for a battery), so add the
+    // clusters for every declared type onto this one composed endpoint.
+    descriptor::config_t desc_cfg;
+    if (!descriptor::create(entry.endpoint, &desc_cfg, CLUSTER_FLAG_SERVER))
+    {
+        ESP_LOGE(TAG, "[%s] descriptor::create failed for part", config.id);
+    }
+    for (uint32_t dt : device_types)
+        add_device_clusters(entry.endpoint, dt);
+
+    // Compose under the root endpoint (adds this endpoint to the root's Descriptor PartsList).
+    if (parent_ep)
+        esp_matter::endpoint::set_parent_endpoint(entry.endpoint, parent_ep);
+
     return entry;
 }
 
@@ -270,7 +376,9 @@ esp_err_t MatterManager::create_matter_device(const device_config_t &config)
     uint32_t root_device_type = -1;
     int part_count = 0;
 
-    std::vector<uint32_t> part_device_types;
+    // All device types declared for each part (a part may compose several, e.g. Electrical Sensor
+    // + Power Source for a battery). Index 0 is the primary type used to pick the device wrapper.
+    std::vector<std::vector<uint32_t>> part_device_types;
 
     {
         cJSON *js = cJSON_Parse(config.matter_structure_json);
@@ -292,12 +400,20 @@ esp_err_t MatterManager::create_matter_device(const device_config_t &config)
                     for (int i = 0; i < part_count; i++)
                     {
                         cJSON *part = cJSON_GetArrayItem(parts, i);
-                        uint32_t pdt = ESP_MATTER_ELECTRICAL_SENSOR_DEVICE_TYPE_ID;
+                        std::vector<uint32_t> types;
                         cJSON *pdts = cJSON_GetObjectItemCaseSensitive(part, "deviceTypes");
-                        cJSON *pdt0 = cJSON_IsArray(pdts) ? cJSON_GetArrayItem(pdts, 0) : nullptr;
-                        if (pdt0 && cJSON_IsNumber(pdt0))
-                            pdt = (uint32_t)pdt0->valueint;
-                        part_device_types.push_back(pdt);
+                        if (cJSON_IsArray(pdts))
+                        {
+                            cJSON *t = nullptr;
+                            cJSON_ArrayForEach(t, pdts)
+                            {
+                                if (cJSON_IsNumber(t))
+                                    types.push_back((uint32_t)t->valueint);
+                            }
+                        }
+                        if (types.empty())
+                            types.push_back(ESP_MATTER_ELECTRICAL_SENSOR_DEVICE_TYPE_ID);
+                        part_device_types.push_back(std::move(types));
                     }
                 }
             }
@@ -335,10 +451,10 @@ esp_err_t MatterManager::create_matter_device(const device_config_t &config)
         uint16_t stored_part = get_stored_part_ep_id(config.matter_structure_json, i);
         bool pnew = false;
         uint16_t pnew_id = MATTER_ENDPOINT_ID_INVALID;
-        EndpointEntry pe = create_or_resume_endpoint(
-            part_device_types[i], root_ep_id,
+        EndpointEntry pe = create_or_resume_part(
+            part_device_types[i], root_entry.endpoint,
             stored_part, config, pnew, pnew_id);
-        if (!pe.bridge_dev)
+        if (!pe.endpoint)
         {
             ESP_LOGE(TAG, "[%s] failed to create part %d", config.id, i);
         }
@@ -348,11 +464,11 @@ esp_err_t MatterManager::create_matter_device(const device_config_t &config)
     }
 
     // Enable root, then all parts
-    endpoint::enable(root_entry.bridge_dev->endpoint);
+    endpoint::enable(root_entry.endpoint);
     for (auto &pe : part_entries)
     {
-        if (pe.bridge_dev)
-            endpoint::enable(pe.bridge_dev->endpoint);
+        if (pe.endpoint)
+            endpoint::enable(pe.endpoint);
     }
 
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();
@@ -388,14 +504,14 @@ esp_err_t MatterManager::create_matter_device(const device_config_t &config)
         }
     }
 
-    // Create our internal devices that contain the Matter delegates etc.
-    // TODO Use the actual device types from the matter_structure.
+    // Create our internal devices that contain the Matter delegates etc., dispatching on the
+    // device type declared in the matter_structure for each endpoint.
     //
-    root_entry.matter_dev = new SolarPowerDevice(root_entry.bridge_dev, config);
-    for (auto &pe : part_entries)
+    root_entry.matter_dev = make_matter_dev(root_device_type, root_entry.endpoint, config);
+    for (size_t i = 0; i < part_entries.size(); i++)
     {
-        if (pe.bridge_dev)
-            pe.matter_dev = new ElectricalSensorDevice(pe.bridge_dev, config);
+        if (part_entries[i].endpoint)
+            part_entries[i].matter_dev = make_matter_dev(part_device_types[i].front(), part_entries[i].endpoint, config);
     }
 
     // We need to store all the endpoints and mappings together so we can route readings updates properly.
@@ -506,11 +622,14 @@ esp_err_t MatterManager::on_device_removed(const char *id)
         return ESP_ERR_NOT_FOUND;
 
     chip::DeviceLayer::PlatformMgr().LockChipStack();
-    for (auto &entry : it->endpoints)
+    // Destroy parts (children) before the root so the parent's PartsList stays consistent.
+    for (auto rit = it->endpoints.rbegin(); rit != it->endpoints.rend(); ++rit)
     {
-        delete entry.matter_dev;
-        if (entry.bridge_dev)
-            esp_matter_bridge::remove_device(entry.bridge_dev);
+        delete rit->matter_dev;
+        if (rit->bridge_dev)
+            esp_matter_bridge::remove_device(rit->bridge_dev);
+        else if (rit->endpoint)
+            esp_matter::endpoint::destroy(m_node, rit->endpoint);
     }
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();
 
@@ -524,11 +643,14 @@ void MatterManager::clear()
     chip::DeviceLayer::PlatformMgr().LockChipStack();
     for (auto &pair : m_devices)
     {
-        for (auto &entry : pair.endpoints)
+        // Destroy parts (children) before the root so the parent's PartsList stays consistent.
+        for (auto rit = pair.endpoints.rbegin(); rit != pair.endpoints.rend(); ++rit)
         {
-            delete entry.matter_dev;
-            if (entry.bridge_dev)
-                esp_matter_bridge::remove_device(entry.bridge_dev);
+            delete rit->matter_dev;
+            if (rit->bridge_dev)
+                esp_matter_bridge::remove_device(rit->bridge_dev);
+            else if (rit->endpoint)
+                esp_matter::endpoint::destroy(m_node, rit->endpoint);
         }
     }
     esp_matter_bridge::factory_reset();

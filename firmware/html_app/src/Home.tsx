@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 const CLUSTER_NAMES: Record<number, string> = {
   0x0090: 'Electrical Power Measurement',
+  0x002F: 'Power Source',
 }
 
 const ATTRIBUTE_META: Record<number, Record<number, { label: string; format: (v: number) => string }>> = {
@@ -10,10 +11,16 @@ const ATTRIBUTE_META: Record<number, Record<number, { label: string; format: (v:
     0x0005: { label: 'Active Current', format: (v) => `${(v / 1000).toFixed(2)} A`  },
     0x0008: { label: 'Active Power',   format: (v) => `${(v / 1000).toFixed(0)} W`  },
   },
+  0x002F: {
+    // BatPercentRemaining is reported in 0-200 half-percent units.
+    0x000C: { label: 'State of Charge', format: (v) => `${(v / 2).toFixed(0)} %` },
+  },
 }
 
 const DEVICE_TYPE_NAMES: Record<number, string> = {
   0x0017: 'Solar Power',
+  0x0018: 'Battery Storage',
+  0x0011: 'Power Source',
   0x0510: 'Electrical Sensor',
 }
 

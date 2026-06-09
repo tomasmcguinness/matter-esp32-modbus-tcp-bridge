@@ -36,7 +36,10 @@ public:
 
     struct EndpointEntry {
         IMatterDevice *matter_dev = nullptr;
+        // Root endpoints are bridged devices (have bridge_dev). Part endpoints are plain composed
+        // endpoints parented to the root (bridge_dev == nullptr). `endpoint` is always set.
         esp_matter_bridge::device_t *bridge_dev = nullptr;
+        esp_matter::endpoint_t      *endpoint   = nullptr;
     };
 
     struct BridgedMatterDevice {
@@ -53,9 +56,16 @@ public:
 
     esp_err_t create_matter_device(const device_config_t &config);
 
+    // Root device: a bridged device parented to the aggregator (via esp_matter_bridge).
     EndpointEntry create_or_resume_endpoint(uint32_t device_type_id, uint16_t parent_ep_id,
                                              uint16_t stored_ep_id, const device_config_t &config,
                                              bool &newly_created_out, uint16_t &new_ep_id_out);
+
+    // Part device: a plain composed endpoint parented to the root endpoint. The bridge API only
+    // allows aggregator-parented devices, so parts cannot be bridged devices.
+    EndpointEntry create_or_resume_part(const std::vector<uint32_t> &device_types, esp_matter::endpoint_t *parent_ep,
+                                        uint16_t stored_ep_id, const device_config_t &config,
+                                        bool &newly_created_out, uint16_t &new_ep_id_out);
 
     std::vector<AttributeMapping> parse_all_mappings(const char *matter_structure_json);
 

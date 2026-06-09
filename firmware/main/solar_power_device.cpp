@@ -75,16 +75,16 @@ CHIP_ERROR SolarPowerDevice::GetAccuracyByIndex(uint8_t index, Structs::Measurem
     return CHIP_NO_ERROR;
 }
 
-SolarPowerDevice::SolarPowerDevice(esp_matter_bridge::device_t *dev, const device_config_t &config)
+SolarPowerDevice::SolarPowerDevice(esp_matter::endpoint_t *ep, const device_config_t &config)
     : m_endpoint_id(0)
 {
-    if (!dev || !dev->endpoint)
+    if (!ep)
     {
-        ESP_LOGE(TAG, "[%s] Invalid bridge device", config.id);
+        ESP_LOGE(TAG, "[%s] Invalid endpoint", config.id);
         return;
     }
 
-    uint16_t ep_id = endpoint::get_id(dev->endpoint);
+    uint16_t ep_id = endpoint::get_id(ep);
 
     chip::BitMask<OptionalAttributes> optional_attrs;
     optional_attrs.Set(OptionalAttributes::kOptionalAttributeVoltage);
