@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Matter Structure Builder</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Matter Structure Builder</h1>
+    <p class="sub">
+      Build the <code>matter_structure</code> payload for a Modbus device, then copy it into the
+      firmware's <em>Add Device</em> form.
+    </p>
+  </header>
+
+  <main>
+    <section class="builder">
+      <!-- Live Modbus connection -->
+      <div class="card" id="conn-card">
+        <div class="card-head">
+          <h2>Modbus connection <span class="pill">read live values while you build</span></h2>
+        </div>
+        <div class="conn-row">
+          <label class="field conn-host">
+            <span>Host</span>
+            <input type="text" id="conn-host" placeholder="192.168.1.164" />
+          </label>
+          <label class="field conn-port">
+            <span>Port</span>
+            <input type="number" id="conn-port" value="502" />
+          </label>
+          <label class="field conn-unit">
+            <span>Unit ID</span>
+            <input type="number" id="conn-unit" value="1" />
+          </label>
+          <button type="button" class="btn ghost" id="conn-test">Test</button>
+          <button type="button" class="btn" id="conn-read-all">Read values</button>
+        </div>
+        <div id="conn-status"></div>
+      </div>
+
+      <!-- Root endpoint -->
+      <div class="card" id="root-card">
+        <div class="card-head">
+          <h2>Root endpoint <span class="pill">the physical device</span></h2>
+        </div>
+        <label class="field">
+          <span>Description</span>
+          <input type="text" id="root-description" placeholder="The name of the device itself" />
+        </label>
+        <fieldset class="field">
+          <legend>Device types</legend>
+          <div class="devtypes" id="root-devtypes"></div>
+        </fieldset>
+        <div class="mappings">
+          <div class="mappings-head">
+            <h3>Register mappings</h3>
+            <button type="button" class="btn small" data-add-mapping="root">+ Add mapping</button>
+          </div>
+          <div class="mapping-list" id="root-mappings"></div>
+        </div>
+      </div>
+
+      <!-- Parts -->
+      <div id="parts"></div>
+      <button type="button" class="btn" id="add-part">+ Add part (logical sub-device)</button>
+    </section>
+
+    <section class="output">
+      <div class="card">
+        <div class="card-head">
+          <h2>Output</h2>
+          <div class="output-actions">
+            <label class="toggle"><input type="checkbox" id="pretty" checked /> Pretty</label>
+            <button type="button" class="btn small" id="copy">Copy</button>
+            <button type="button" class="btn small" id="download">Download</button>
+          </div>
+        </div>
+        <div id="size-bar"></div>
+        <div id="issues"></div>
+        <pre id="preview"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

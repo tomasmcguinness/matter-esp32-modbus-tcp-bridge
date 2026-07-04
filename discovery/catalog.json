@@ -1,0 +1,69 @@
+{
+  "note": "Only the device types and attributes the firmware actually implements are listed here. Keep this in sync with firmware/main/matter_manager.cpp (add_device_clusters) and modbus_manager.cpp.",
+  "functions": [
+    { "code": 4, "name": "Read Input Registers (FC04)", "default": true },
+    { "code": 3, "name": "Read Holding Registers (FC03)" }
+  ],
+  "deviceTypes": [
+    {
+      "id": 23,
+      "hex": "0x0017",
+      "name": "Solar Power",
+      "role": "root",
+      "description": "The physical inverter / solar power device. Use this on the root endpoint."
+    },
+    {
+      "id": 1296,
+      "hex": "0x0510",
+      "name": "Electrical Sensor",
+      "role": "any",
+      "description": "Voltage / current / power measurement for one circuit (e.g. a PV string or the battery)."
+    },
+    {
+      "id": 17,
+      "hex": "0x0011",
+      "name": "Power Source",
+      "role": "any",
+      "description": "Battery / power source. Adds state-of-charge (BatPercentRemaining). Pair with Electrical Sensor on a battery part."
+    }
+  ],
+  "attributes": [
+    {
+      "label": "Voltage",
+      "cluster": 144,
+      "clusterHex": "0x0090",
+      "clusterName": "Electrical Power Measurement",
+      "attribute": 4,
+      "attributeHex": "0x0004"
+    },
+    {
+      "label": "Active Current",
+      "cluster": 144,
+      "clusterHex": "0x0090",
+      "clusterName": "Electrical Power Measurement",
+      "attribute": 5,
+      "attributeHex": "0x0005"
+    },
+    {
+      "label": "Active Power",
+      "cluster": 144,
+      "clusterHex": "0x0090",
+      "clusterName": "Electrical Power Measurement",
+      "attribute": 8,
+      "attributeHex": "0x0008"
+    },
+    {
+      "label": "Battery % Remaining",
+      "cluster": 47,
+      "clusterHex": "0x002F",
+      "clusterName": "Power Source",
+      "attribute": 12,
+      "attributeHex": "0x000C",
+      "requiresDeviceType": 17
+    }
+  ],
+  "limits": {
+    "maxStructureBytes": 2048,
+    "maxRegisterSpan": 125
+  }
+}
