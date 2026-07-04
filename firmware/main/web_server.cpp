@@ -13,6 +13,9 @@
 #include "devices_store.h"
 #include "device_manager.h"
 #include "device_readings.h"
+#include "modbus_manager.h"
+
+#include <vector>
 
 #include <setup_payload/OnboardingCodesUtil.h>
 #include <app/server/Server.h>
@@ -492,6 +495,142 @@ static esp_err_t matter_open_window_handler(httpd_req_t *req)
     return httpd_resp_send(req, nullptr, 0);
 }
 
+// Shared parse of { host, port, unitId } from a POST body. Returns the parsed
+// cJSON root (caller must cJSON_Delete) via *out_root, or nullptr after sending
+// a 400. The host pointer is valid while *out_root lives.
+static bool parse_modbus_target(httpd_req_t *req, const char *body,
+                                const char **host, uint16_t *port, uint8_t *unit_id,
+                                cJSON **out_root)
+{
+    *out_root = nullptr;
+    cJSON *root = cJSON_Parse(body);
+    if (!root)
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad JSON");
+        return false;
+    }
+    cJSON *host_j   = cJSON_GetObjectItemCaseSensitive(root, "host");
+    cJSON *port_j   = cJSON_GetObjectItemCaseSensitive(root, "port");
+    cJSON *unitId_j = cJSON_GetObjectItemCaseSensitive(root, "unitId");
+    if (!cJSON_IsString(host_j) || host_j->valuestring[0] == '\0' ||
+        !cJSON_IsNumber(port_j) || !cJSON_IsNumber(unitId_j))
+    {
+        cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or invalid fields");
+        return false;
+    }
+    *host    = host_j->valuestring;
+    *port    = (uint16_t)port_j->valueint;
+    *unit_id = (uint8_t)unitId_j->valueint;
+    *out_root = root;
+    return true;
+}
+
+static esp_err_t modbus_test_connection_handler(httpd_req_t *req)
+{
+    char buf[256];
+    if (read_body(req, buf, sizeof(buf)) != ESP_OK)
+    {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid body");
+        return ESP_FAIL;
+    }
+
+    const char *host = nullptr;
+    uint16_t port = 0;
+    uint8_t unit_id = 0;
+    cJSON *root = nullptr;
+    if (!parse_modbus_target(req, buf, &host, &port, &unit_id, &root))
+    {
+        return ESP_FAIL;
+    }
+
+    esp_err_t err = ModbusManager::instance().test_connection(host, port, unit_id);
+    cJSON_Delete(root);
+
+    cJSON *resp = cJSON_CreateObject();
+    if (err == ESP_OK)
+    {
+        cJSON_AddBoolToObject(resp, "ok", true);
+        return send_json(req, resp, 200);
+    }
+    cJSON_AddBoolToObject(resp, "ok", false);
+    cJSON_AddStringToObject(resp, "error", "Could not reach device");
+    httpd_resp_set_status(req, "502 Bad Gateway");
+    return send_json(req, resp, 502);
+}
+
+static esp_err_t modbus_read_handler(httpd_req_t *req)
+{
+    char *buf = (char *)malloc(MAX_POST_BODY + 1);
+    if (!buf)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "OOM");
+        return ESP_FAIL;
+    }
+    if (read_body(req, buf, MAX_POST_BODY + 1) != ESP_OK)
+    {
+        free(buf);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid body");
+        return ESP_FAIL;
+    }
+
+    const char *host = nullptr;
+    uint16_t port = 0;
+    uint8_t unit_id = 0;
+    cJSON *root = nullptr;
+    bool ok = parse_modbus_target(req, buf, &host, &port, &unit_id, &root);
+    free(buf);
+    if (!ok)
+    {
+        return ESP_FAIL;
+    }
+
+    cJSON *registers = cJSON_GetObjectItemCaseSensitive(root, "registers");
+    if (!cJSON_IsArray(registers))
+    {
+        cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing registers array");
+        return ESP_FAIL;
+    }
+
+    std::vector<ModbusManager::ReadReq> reqs;
+    cJSON *item = nullptr;
+    cJSON_ArrayForEach(item, registers)
+    {
+        cJSON *func = cJSON_GetObjectItemCaseSensitive(item, "function");
+        cJSON *addr = cJSON_GetObjectItemCaseSensitive(item, "address");
+        if (!cJSON_IsNumber(func) || !cJSON_IsNumber(addr)) continue;
+        reqs.push_back({(uint16_t)addr->valueint, func->valueint == 4});
+    }
+
+    std::vector<ModbusManager::ReadResp> results;
+    esp_err_t err = ModbusManager::instance().read_registers(host, port, unit_id, reqs, results);
+    cJSON_Delete(root);
+
+    if (err != ESP_OK)
+    {
+        cJSON *resp = cJSON_CreateObject();
+        cJSON_AddBoolToObject(resp, "ok", false);
+        cJSON_AddStringToObject(resp, "error", "Could not reach device");
+        httpd_resp_set_status(req, "502 Bad Gateway");
+        return send_json(req, resp, 502);
+    }
+
+    cJSON *values = cJSON_CreateArray();
+    for (const auto &r : results)
+    {
+        if (!r.ok) continue; // omit failed reads; the UI renders "—"
+        cJSON *v = cJSON_CreateObject();
+        cJSON_AddNumberToObject(v, "function", r.input ? 4 : 3);
+        cJSON_AddNumberToObject(v, "address",  r.address);
+        cJSON_AddNumberToObject(v, "value",    r.value);
+        cJSON_AddItemToArray(values, v);
+    }
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddItemToObject(resp, "values", values);
+    return send_json(req, resp, 200);
+}
+
 static esp_err_t static_get_handler(httpd_req_t *req)
 {
     const char *uri = req->uri;
@@ -721,6 +860,22 @@ esp_err_t web_server_start(factory_reset_cb_t on_factory_reset)
         .user_ctx = nullptr,
     };
     httpd_register_uri_handler(server, &matter_open_window_uri);
+
+    const httpd_uri_t modbus_test_connection_uri = {
+        .uri      = "/api/modbus/test-connection",
+        .method   = HTTP_POST,
+        .handler  = modbus_test_connection_handler,
+        .user_ctx = nullptr,
+    };
+    httpd_register_uri_handler(server, &modbus_test_connection_uri);
+
+    const httpd_uri_t modbus_read_uri = {
+        .uri      = "/api/modbus/read",
+        .method   = HTTP_POST,
+        .handler  = modbus_read_handler,
+        .user_ctx = nullptr,
+    };
+    httpd_register_uri_handler(server, &modbus_read_uri);
 
     const httpd_uri_t static_uri = {
         .uri      = "/*",

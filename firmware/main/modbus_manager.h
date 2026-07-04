@@ -20,6 +20,24 @@ public:
 
     ModbusDevice *find(const char *id) const;
 
+    // ---- Ad-hoc (transient) access for the Add Device wizard ----
+    // These open a fresh short-lived connection and do NOT create a persisted
+    // device or a polling task. Used by POST /api/modbus/test-connection and
+    // POST /api/modbus/read.
+
+    struct ReadReq  { uint16_t address; bool input; };
+    struct ReadResp { uint16_t address; bool input; bool ok; uint16_t value; };
+
+    // Verify the device is reachable by reading a single register. ESP_OK on success.
+    esp_err_t test_connection(const char *host, uint16_t port, uint8_t unit_id);
+
+    // Read each requested register over one transient connection, appending a
+    // ReadResp (with an `ok` flag) per request. Returns ESP_OK if the connection
+    // could be established (at least one read succeeded), ESP_FAIL otherwise.
+    esp_err_t read_registers(const char *host, uint16_t port, uint8_t unit_id,
+                             const std::vector<ReadReq> &reqs,
+                             std::vector<ReadResp> &out);
+
 private:
     ModbusManager() = default;
 

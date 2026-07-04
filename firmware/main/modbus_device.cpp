@@ -1,10 +1,13 @@
 #include "modbus_device.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
 #include <netdb.h>
 #include <sys/socket.h>
+#include <sys/select.h>
+#include <sys/time.h>
 
 #include "esp_log.h"
 
@@ -14,6 +17,12 @@ static const char *TAG = "modbus_device";
 #define MODBUS_MAX_REGISTERS 125
 
 #define POLL_INTERVAL_MS 5000
+
+// Bound socket operations so an unreachable host can't block the caller
+// indefinitely (matters for the ad-hoc test-connection / read endpoints, which
+// run on the HTTP server task).
+#define MODBUS_CONNECT_TIMEOUT_S 3
+#define MODBUS_IO_TIMEOUT_S      3
 
 ModbusDevice::ModbusDevice(const device_config_t &config, std::vector<RegisterSpec> regs)
     : m_config(config), m_regs(std::move(regs)), m_sock(-1), m_transaction_id(0),
@@ -160,7 +169,33 @@ esp_err_t ModbusDevice::ensure_connected()
         return ESP_FAIL;
     }
 
-    if (connect(sock, res->ai_addr, res->ai_addrlen) != 0)
+    // Non-blocking connect with a bounded wait, so a silently-dropped SYN to an
+    // unreachable host times out in a few seconds rather than the TCP default.
+    int flags = fcntl(sock, F_GETFL, 0);
+    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+
+    int rc = connect(sock, res->ai_addr, res->ai_addrlen);
+    if (rc != 0 && errno == EINPROGRESS)
+    {
+        fd_set wset;
+        FD_ZERO(&wset);
+        FD_SET(sock, &wset);
+        struct timeval tv = { .tv_sec = MODBUS_CONNECT_TIMEOUT_S, .tv_usec = 0 };
+        rc = select(sock + 1, nullptr, &wset, nullptr, &tv);
+        if (rc > 0)
+        {
+            int soerr = 0;
+            socklen_t slen = sizeof(soerr);
+            getsockopt(sock, SOL_SOCKET, SO_ERROR, &soerr, &slen);
+            errno = soerr;
+            rc = (soerr == 0) ? 0 : -1;
+        }
+        else
+        {
+            rc = -1; // select() timed out (0) or errored (<0)
+        }
+    }
+    if (rc != 0)
     {
         ESP_LOGE(TAG, "[%s] connect(%s:%u) failed: %d", m_config.id, m_config.host, m_config.port, errno);
         freeaddrinfo(res);
@@ -168,6 +203,12 @@ esp_err_t ModbusDevice::ensure_connected()
         m_state = ModbusConnectionState::Failed;
         return ESP_FAIL;
     }
+
+    // Restore blocking mode and bound send/recv so a half-open peer can't stall us.
+    fcntl(sock, F_SETFL, flags);
+    struct timeval io_to = { .tv_sec = MODBUS_IO_TIMEOUT_S, .tv_usec = 0 };
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &io_to, sizeof(io_to));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &io_to, sizeof(io_to));
 
     freeaddrinfo(res);
     m_sock = sock;

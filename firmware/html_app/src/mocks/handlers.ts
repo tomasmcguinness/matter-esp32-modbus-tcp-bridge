@@ -122,6 +122,28 @@ export const handlers = [
     nextEndpointId = 4
     return new HttpResponse(null, { status: 200 })
   }),
+
+  // POST /api/modbus/test-connection — succeed unless host is obviously empty
+  http.post('/api/modbus/test-connection', async ({ request }) => {
+    const body = (await request.json()) as { host?: string }
+    const ok = !!body.host && body.host.trim().length > 6
+    return ok
+      ? HttpResponse.json({ ok: true })
+      : HttpResponse.json({ ok: false, error: 'Host unreachable' }, { status: 502 })
+  }),
+
+  // POST /api/modbus/read — echo a plausible raw value per requested register
+  http.post('/api/modbus/read', async ({ request }) => {
+    const body = (await request.json()) as {
+      registers: { function: number; address: number }[]
+    }
+    const values = (body.registers ?? []).map((r) => ({
+      function: r.function,
+      address: r.address,
+      value: mockRegisterValue(r.address),
+    }))
+    return HttpResponse.json({ values })
+  }),
 ]
 
 function mockValue(attributeId: number): number {
@@ -129,4 +151,22 @@ function mockValue(attributeId: number): number {
   if (attributeId === 0x0005) return 9500     // ~9.5 A
   if (attributeId === 0x0008) return 2300000  // ~2300 W
   return 0
+}
+
+// Keyed by register address (not attribute) — the wizard reads raw registers
+// before any device (and its endpoint IDs) exists. Values line up with the
+// sample the "Load sample" button inserts.
+function mockRegisterValue(address: number): number {
+  const table: Record<number, number> = {
+    0x0000: 243800,   // inverter voltage  → 243.8 V
+    0x0001: 9500,     // inverter current  → 9.50 A
+    0x0002: 2300000,  // inverter power    → 2300 W
+    0x0003: 121000,   // PV1 voltage       → 121.0 V
+    0x0005: 4200000,  // PV1 current       → 4200 A raw (scaled by UI)
+    0x000a: 1270000,  // PV1 power
+    0x0014: 51200,    // battery voltage   → 51.2 V
+    0x0015: 18000000, // battery current
+    0x001c: 156,      // SOC (raw/2 = 78 %)
+  }
+  return table[address] ?? 0 // unmapped registers read as 0
 }

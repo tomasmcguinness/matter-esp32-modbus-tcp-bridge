@@ -1,6 +1,7 @@
 #include "modbus_manager.h"
 
 #include <algorithm>
+#include <stdlib.h>
 #include <string.h>
 
 #include "esp_log.h"
@@ -154,6 +155,58 @@ ModbusDevice *ModbusManager::find(const char *id) const
     auto it = std::find_if(m_devices.begin(), m_devices.end(),
         [id](ModbusDevice *d) { return strcmp(d->id(), id) == 0; });
     return it != m_devices.end() ? *it : nullptr;
+}
+
+// Build a throwaway ModbusDevice for ad-hoc reads. The config is heap-allocated
+// (it embeds the 2 KB matter_structure buffer) to keep the caller's stack small,
+// and the device itself lives on the heap so callers must delete it.
+static ModbusDevice *make_transient(const char *host, uint16_t port, uint8_t unit_id)
+{
+    device_config_t *cfg = (device_config_t *)calloc(1, sizeof(device_config_t));
+    if (!cfg) return nullptr;
+    strlcpy(cfg->id, "transient", sizeof(cfg->id));
+    strlcpy(cfg->host, host, sizeof(cfg->host));
+    cfg->port    = port;
+    cfg->unit_id = unit_id;
+    ModbusDevice *dev = new ModbusDevice(*cfg, {});
+    free(cfg);
+    return dev;
+}
+
+esp_err_t ModbusManager::test_connection(const char *host, uint16_t port, uint8_t unit_id)
+{
+    ModbusDevice *dev = make_transient(host, port, unit_id);
+    if (!dev) return ESP_ERR_NO_MEM;
+
+    uint16_t tmp = 0;
+    esp_err_t err = dev->read_input_registers(0x0000, 1, &tmp);
+    delete dev; // destructor closes the socket
+    return err;
+}
+
+esp_err_t ModbusManager::read_registers(const char *host, uint16_t port, uint8_t unit_id,
+                                        const std::vector<ReadReq> &reqs,
+                                        std::vector<ReadResp> &out)
+{
+    ModbusDevice *dev = make_transient(host, port, unit_id);
+    if (!dev) return ESP_ERR_NO_MEM;
+
+    bool any_ok = false;
+    for (const auto &r : reqs) {
+        uint16_t v = 0;
+        esp_err_t err = r.input ? dev->read_input_registers(r.address, 1, &v)
+                                : dev->read_holding_registers(r.address, 1, &v);
+        bool ok = (err == ESP_OK);
+        if (ok) any_ok = true;
+        out.push_back({r.address, r.input, ok, v});
+
+        // If we couldn't even open the socket, the host is unreachable — bail out
+        // instead of repeating the (slow) connect attempt for every register.
+        if (!ok && dev->state() == ModbusConnectionState::Failed) break;
+    }
+
+    delete dev;
+    return (reqs.empty() || any_ok) ? ESP_OK : ESP_FAIL;
 }
 
 
