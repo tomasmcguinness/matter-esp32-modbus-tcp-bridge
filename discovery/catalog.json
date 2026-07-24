@@ -1,5 +1,5 @@
 {
-  "note": "Only the device types and attributes the firmware actually implements are listed here. Keep this in sync with firmware/main/matter_manager.cpp (add_device_clusters) and modbus_manager.cpp.",
+  "note": "Only the device types and attributes the firmware actually implements are listed here. Each attribute declares the device type ids it belongs to (deviceTypes) and whether it is mandatory for those types. The wizard only offers an attribute for mapping when one of its deviceTypes is selected on the endpoint, and auto-adds mandatory attributes when a device type is checked. Keep this in sync with firmware/main/matter_manager.cpp (add_device_clusters) and modbus_manager.cpp.",
   "functions": [
     { "code": 4, "name": "Read Input Registers (FC04)", "default": true },
     { "code": 3, "name": "Read Holding Registers (FC03)" }
@@ -34,7 +34,9 @@
       "clusterHex": "0x0090",
       "clusterName": "Electrical Power Measurement",
       "attribute": 4,
-      "attributeHex": "0x0004"
+      "attributeHex": "0x0004",
+      "deviceTypes": [23, 1296],
+      "mandatory": false
     },
     {
       "label": "Active Current",
@@ -42,7 +44,9 @@
       "clusterHex": "0x0090",
       "clusterName": "Electrical Power Measurement",
       "attribute": 5,
-      "attributeHex": "0x0005"
+      "attributeHex": "0x0005",
+      "deviceTypes": [23, 1296],
+      "mandatory": false
     },
     {
       "label": "Active Power",
@@ -50,7 +54,9 @@
       "clusterHex": "0x0090",
       "clusterName": "Electrical Power Measurement",
       "attribute": 8,
-      "attributeHex": "0x0008"
+      "attributeHex": "0x0008",
+      "deviceTypes": [23, 1296],
+      "mandatory": true
     },
     {
       "label": "Battery % Remaining",
@@ -59,7 +65,8 @@
       "clusterName": "Power Source",
       "attribute": 12,
       "attributeHex": "0x000C",
-      "requiresDeviceType": 17
+      "deviceTypes": [17],
+      "mandatory": false
     }
   ],
   "limits": {

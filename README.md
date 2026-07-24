@@ -2,8 +2,8 @@
 
 This project allows you to create Matter devices from Modbus devices. It will act as a bridge between the two ecosystems, allowing you to easily connect your devices to your Matter ecosystem.
 
-> [!NOTE]
-> This project only supports the Solax X1-G4 inverter at this time. I have plans to expand support.
+> [!CAUTION]
+> This project has been tested with a Solax X1-G4 and a  inverter at this time. I have plans to expand support.
 
 ## Hardware
 

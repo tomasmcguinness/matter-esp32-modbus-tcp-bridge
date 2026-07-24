@@ -18,9 +18,45 @@ const state = {
 let partSeq = 0;
 let busy = false; // true while a Modbus request is in flight (disables read buttons)
 
-function newMapping() {
+function defaultFunction() {
   const fn = CATALOG.functions.find((f) => f.default) || CATALOG.functions[0];
-  return { attrIdx: 0, function: fn.code, address: "" };
+  return fn.code;
+}
+
+// True if `attr` belongs to at least one device type currently selected on `node`.
+function attrInNode(attr, node) {
+  return (attr.deviceTypes || []).some((id) => node.deviceTypes.has(id));
+}
+
+// Indices into CATALOG.attributes that are offerable on `node` given its selected device types.
+function availableAttrIdxs(node) {
+  const out = [];
+  CATALOG.attributes.forEach((a, idx) => { if (attrInNode(a, node)) out.push(idx); });
+  return out;
+}
+
+// A blank mapping for `node`, defaulting to its first available attribute.
+// Returns null when the node has no selectable attributes yet (no device type chosen).
+function newMapping(node) {
+  const avail = availableAttrIdxs(node);
+  if (avail.length === 0) return null;
+  return { attrIdx: avail[0], function: defaultFunction(), address: "" };
+}
+
+// When `dtId` is checked on `node`, add a blank row for each mandatory attribute of that
+// device type that isn't already mapped. The user fills in the register address.
+function addMandatoryMappings(node, dtId) {
+  CATALOG.attributes.forEach((a, idx) => {
+    if (!a.mandatory || !(a.deviceTypes || []).includes(dtId)) return;
+    if (node.mappings.some((m) => m.attrIdx === idx)) return;
+    node.mappings.push({ attrIdx: idx, function: defaultFunction(), address: "" });
+  });
+}
+
+// Drop mappings whose attribute no longer belongs to any selected device type.
+// Attributes shared with a still-selected device type are kept.
+function pruneMappings(node) {
+  node.mappings = node.mappings.filter((m) => attrInNode(CATALOG.attributes[m.attrIdx], node));
 }
 
 // ---- address parsing: accept "0x1A", "26", " 0x00 " ----
@@ -51,8 +87,14 @@ function renderDeviceTypes(container, node) {
     cb.type = "checkbox";
     cb.checked = checked;
     cb.addEventListener("change", () => {
-      if (cb.checked) node.deviceTypes.add(dt.id);
-      else node.deviceTypes.delete(dt.id);
+      if (cb.checked) {
+        node.deviceTypes.add(dt.id);
+        addMandatoryMappings(node, dt.id);
+      } else {
+        node.deviceTypes.delete(dt.id);
+        // Remove mappings that belonged solely to the now-unselected device type.
+        pruneMappings(node);
+      }
       render();
     });
     label.appendChild(cb);
@@ -85,10 +127,12 @@ function renderMappings(container, node) {
     c1.className = "col";
     c1.innerHTML = "<span>Attribute</span>";
     const attrSel = document.createElement("select");
-    CATALOG.attributes.forEach((a, idx) => {
+    // Only offer attributes that belong to a device type selected on this endpoint.
+    availableAttrIdxs(node).forEach((idx) => {
+      const a = CATALOG.attributes[idx];
       const opt = document.createElement("option");
       opt.value = idx;
-      opt.textContent = `${a.label} (${a.clusterName})`;
+      opt.textContent = a.mandatory ? `${a.label} (${a.clusterName}) — required` : `${a.label} (${a.clusterName})`;
       if (idx === m.attrIdx) opt.selected = true;
       attrSel.appendChild(opt);
     });
@@ -217,7 +261,12 @@ function renderParts() {
     addBtn.type = "button";
     addBtn.className = "btn small";
     addBtn.textContent = "+ Add mapping";
-    addBtn.addEventListener("click", () => { part.mappings.push(newMapping()); render(); });
+    addBtn.disabled = availableAttrIdxs(part).length === 0;
+    addBtn.title = addBtn.disabled ? "Select a device type first" : "";
+    addBtn.addEventListener("click", () => {
+      const m = newMapping(part);
+      if (m) { part.mappings.push(m); render(); }
+    });
     mpHead.appendChild(addBtn);
     mp.appendChild(mpHead);
     const list = document.createElement("div");
@@ -280,18 +329,6 @@ function collectIssues(structure) {
   if (state.root.deviceTypes.size === 0) {
     issues.push({ level: "err", text: "Root endpoint has no device type selected." });
   }
-
-  // Battery % attribute requires Power Source device type on the same node
-  allNodes.forEach((node, i) => {
-    const needsPS = node.mappings.some((m) => {
-      const a = CATALOG.attributes[m.attrIdx];
-      return a.requiresDeviceType && !node.deviceTypes.has(a.requiresDeviceType);
-    });
-    if (needsPS) {
-      const where = i === 0 ? "Root endpoint" : `Part ${i}`;
-      issues.push({ level: "warn", text: `${where} maps Battery % but is missing the Power Source (0x0011) device type — the attribute won't be created.` });
-    }
-  });
 
   // Register read span per function code (firmware bulk-reads min..max in one request)
   const spans = {};
@@ -368,6 +405,9 @@ function scheduleOutput() {
 function render() {
   renderDeviceTypes(document.getElementById("root-devtypes"), state.root);
   renderMappings(document.getElementById("root-mappings"), state.root);
+  const rootAdd = document.querySelector('[data-add-mapping="root"]');
+  rootAdd.disabled = availableAttrIdxs(state.root).length === 0;
+  rootAdd.title = rootAdd.disabled ? "Select a device type first" : "";
   renderParts();
   renderOutput();
   syncConnControls();
@@ -505,11 +545,11 @@ function currentJsonText() {
 async function init() {
   CATALOG = await (await fetch("/catalog.json")).json();
 
-  // Seed with a sensible starting point.
-  state.root.description = "The Inverter itself";
   const solar = CATALOG.deviceTypes.find((d) => d.role === "root");
-  if (solar) state.root.deviceTypes.add(solar.id);
-  state.root.mappings.push(newMapping());
+  if (solar) {
+    state.root.deviceTypes.add(solar.id);
+    addMandatoryMappings(state.root, solar.id);
+  }
 
   document.getElementById("root-description").value = state.root.description;
   document.getElementById("root-description").addEventListener("input", (e) => {
@@ -518,8 +558,8 @@ async function init() {
   });
 
   document.querySelector('[data-add-mapping="root"]').addEventListener("click", () => {
-    state.root.mappings.push(newMapping());
-    render();
+    const m = newMapping(state.root);
+    if (m) { state.root.mappings.push(m); render(); }
   });
 
   // Modbus connection controls
@@ -536,7 +576,9 @@ async function init() {
 
   document.getElementById("add-part").addEventListener("click", () => {
     partSeq++;
-    state.parts.push({ description: "", deviceTypes: new Set(), mappings: [newMapping()] });
+    // A new part starts with no device type; mappings become available once one is picked
+    // (mandatory attributes auto-populate at that point).
+    state.parts.push({ description: "", deviceTypes: new Set(), mappings: [] });
     render();
   });
 
